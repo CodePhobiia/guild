@@ -131,6 +131,20 @@ class ToolExecutionResult:
             error_lines.append(
                 "Suggestion: Use list_directory or search_files to find the correct path."
             )
+        elif "user denied permission" in error_lower:
+            # User explicitly denied - do not retry this tool
+            error_lines.append(
+                "IMPORTANT: The user explicitly denied permission for this tool. "
+                "Do NOT retry this same tool call. Acknowledge the denial and either "
+                "try an alternative approach or ask the user what they would prefer."
+            )
+        elif "tool is blocked" in error_lower:
+            # Tool was permanently blocked by user
+            error_lines.append(
+                "IMPORTANT: This tool has been blocked by the user and cannot be used. "
+                "Do NOT attempt to call this tool again. Inform the user you cannot "
+                "perform this action and suggest alternative approaches if available."
+            )
         elif "permission" in error_lower or "denied" in error_lower:
             error_lines.append(
                 "Suggestion: Check if the path is within allowed directories, "

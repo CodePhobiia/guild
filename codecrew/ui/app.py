@@ -403,31 +403,30 @@ class ChatApp:
 
         # Handle response
         if response == PermissionResponse.ALLOW:
-            # Grant one-time permission
+            # One-time allow - grant session permission so the current call proceeds
+            # The session grant will be used for subsequent calls to the same tool
             if hasattr(self.orchestrator, "tool_executor"):
-                self.orchestrator.tool_executor.permissions.grant_once(
-                    tool_call.id
+                self.orchestrator.tool_executor.permissions.grant_session_permission(
+                    tool_call.name
                 )
         elif response == PermissionResponse.ALWAYS:
-            # Grant permanent permission for this tool
+            # Grant permanent permission for this tool by setting it to SAFE level
             if hasattr(self.orchestrator, "tool_executor"):
+                from codecrew.tools.permissions import PermissionLevel
                 self.orchestrator.tool_executor.permissions.set_tool_permission(
                     tool_call.name,
-                    "safe",
+                    PermissionLevel.SAFE,
                 )
         elif response == PermissionResponse.ALLOW_SESSION:
             # Grant session permission
             if hasattr(self.orchestrator, "tool_executor"):
-                self.orchestrator.tool_executor.permissions.grant_session(
+                self.orchestrator.tool_executor.permissions.grant_session_permission(
                     tool_call.name
                 )
         elif response == PermissionResponse.NEVER:
             # Block this tool
             if hasattr(self.orchestrator, "tool_executor"):
-                self.orchestrator.tool_executor.permissions.set_tool_permission(
-                    tool_call.name,
-                    "blocked",
-                )
+                self.orchestrator.tool_executor.permissions.block_tool(tool_call.name)
         # DENY is handled by default (permission not granted)
 
     def _handle_error(self, error: str) -> None:

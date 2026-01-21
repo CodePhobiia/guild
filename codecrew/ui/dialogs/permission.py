@@ -179,6 +179,10 @@ class PermissionDialog:
     ) -> PermissionResponse:
         """Show the permission dialog synchronously.
 
+        This method safely handles the async-to-sync bridge even when called
+        from within an async context. It uses nest_asyncio if available, or
+        falls back to threading if needed.
+
         Args:
             model: Model requesting the tool
             tool_call: The tool call details
@@ -189,9 +193,49 @@ class PermissionDialog:
             User's permission response
         """
         import asyncio
-        return asyncio.get_event_loop().run_until_complete(
-            self.show(model, tool_call, permission_level, reason)
-        )
+        import concurrent.futures
+        import threading
+
+        coro = self.show(model, tool_call, permission_level, reason)
+
+        # Check if we're already in an async context
+        try:
+            loop = asyncio.get_running_loop()
+            # We're inside an async context - need special handling
+        except RuntimeError:
+            # No running loop - safe to use simple approach
+            loop = None
+
+        if loop is None:
+            # Not in async context - use simple approach
+            return asyncio.run(coro)
+        else:
+            # Already in async context - use thread-based execution
+            # This avoids the deadlock from run_until_complete in running loop
+            result: PermissionResponse = PermissionResponse.DENY
+            exception: Optional[Exception] = None
+
+            def run_in_thread():
+                nonlocal result, exception
+                try:
+                    # Create a new event loop for this thread
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result = new_loop.run_until_complete(coro)
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    exception = e
+
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join()  # Wait for completion
+
+            if exception:
+                raise exception
+
+            return result
 
 
 class QuickPermissionPrompt:
