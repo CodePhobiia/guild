@@ -207,14 +207,27 @@ class GeminiClient(ModelClient):
 
     def _handle_api_error(self, e: Exception) -> None:
         """Convert Google API exceptions to our error types."""
-        error_str = str(e).lower()
+        # Extract error message properly from various exception types
+        error_msg = str(e)
 
-        if "quota" in error_str or "rate" in error_str:
-            raise RateLimitError(str(e))
+        # Google exceptions may have a message attribute
+        if hasattr(e, "message"):
+            error_msg = str(e.message)
+        elif hasattr(e, "args") and e.args:
+            error_msg = str(e.args[0])
+
+        # If error message is empty or unhelpful, include exception type
+        if not error_msg or error_msg in ("", "object", "'object'"):
+            error_msg = f"{type(e).__name__}: {repr(e)}"
+
+        error_str = error_msg.lower()
+
+        if "quota" in error_str or "rate" in error_str or "429" in error_str:
+            raise RateLimitError(error_msg)
         elif "api key" in error_str or "authentication" in error_str or "invalid" in error_str:
-            raise AuthenticationError(str(e))
+            raise AuthenticationError(error_msg)
         else:
-            raise APIError(str(e))
+            raise APIError(error_msg)
 
     @with_retry(max_retries=3)
     async def generate(
@@ -264,7 +277,8 @@ class GeminiClient(ModelClient):
 
         except Exception as e:
             self._handle_api_error(e)
-            raise
+            # Note: _handle_api_error always raises, so this line is not reached
+            raise  # pragma: no cover
 
     async def generate_stream(
         self,
