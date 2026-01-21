@@ -38,6 +38,7 @@ def register_builtin_tools(
     working_directory: str | None = None,
     allowed_paths: list[str] | None = None,
     include_git: bool = True,
+    command_timeout: float = 300.0,
 ) -> None:
     """Register all built-in tools with a registry.
 
@@ -48,6 +49,8 @@ def register_builtin_tools(
         allowed_paths: List of paths that tools are allowed to access.
                       If None, no path restrictions are enforced.
         include_git: If True, include git tools (default: True).
+        command_timeout: Timeout in seconds for shell command execution.
+                        Default is 300 seconds (5 minutes).
     """
     # File tools
     registry.register(
@@ -85,6 +88,7 @@ def register_builtin_tools(
     registry.register(
         create_execute_command_tool(
             working_directory=working_directory,
+            timeout=command_timeout,
         )
     )
 
