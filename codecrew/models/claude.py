@@ -124,24 +124,22 @@ class ClaudeClient(ModelClient):
                     })
 
             elif msg.role == MessageRole.TOOL:
-                # Check if this tool result is for a tool WE called
-                # by looking at the previous message
-                our_tool_call = False
-                if anthropic_messages:
-                    last_msg = anthropic_messages[-1]
-                    if last_msg.get("role") == "assistant":
-                        content = last_msg.get("content", [])
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "tool_use":
-                                    for result in msg.tool_results:
-                                        if block.get("id") == result.tool_call_id:
-                                            our_tool_call = True
-                                            break
+                # Find tool_call_ids that belong to OUR previous assistant messages
+                # by searching backwards through the ORIGINAL messages list
+                our_tool_ids: set[str] = set()
+                msg_index = messages.index(msg)
+                for prev_msg in reversed(messages[:msg_index]):
+                    if prev_msg.role == MessageRole.ASSISTANT:
+                        is_ours = not prev_msg.model or prev_msg.model.lower() == self.name.lower()
+                        if is_ours and prev_msg.tool_calls:
+                            for tc in prev_msg.tool_calls:
+                                our_tool_ids.add(tc.id)
+                        # Keep searching - there might be multiple assistant messages with tools
 
-                if our_tool_call:
-                    # Tool results for OUR tool calls - use Anthropic format
-                    for result in msg.tool_results:
+                # Process each tool result based on ownership
+                for result in msg.tool_results:
+                    if result.tool_call_id in our_tool_ids:
+                        # Our tool call - use native Anthropic format
                         anthropic_messages.append({
                             "role": "user",
                             "content": [{
@@ -151,13 +149,15 @@ class ClaudeClient(ModelClient):
                                 "is_error": result.is_error,
                             }],
                         })
-                else:
-                    # Tool results from OTHER models - convert to user message
-                    for result in msg.tool_results:
+                    else:
+                        # Other model's tool call - convert to user message
                         status = "Error" if result.is_error else "Success"
+                        content = result.content
+                        if len(content) > 2000:
+                            content = content[:1997] + "..."
                         anthropic_messages.append({
                             "role": "user",
-                            "content": f"[Tool Result ({status})]: {result.content[:2000]}",
+                            "content": f"[Tool Result ({status})]: {content}",
                         })
 
         return system_content, anthropic_messages

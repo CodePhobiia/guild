@@ -142,36 +142,45 @@ class GeminiClient(ModelClient):
                         })
 
             elif msg.role == MessageRole.TOOL:
-                # Check if this tool result is for a tool WE called
-                # by looking at the previous message
-                our_tool_call = False
-                if contents:
-                    last_msg = contents[-1]
-                    if last_msg.get("role") == "model":
-                        for part in last_msg.get("parts", []):
-                            if "function_call" in part:
-                                our_tool_call = True
-                                break
+                # Find tool_call_ids that belong to OUR previous assistant messages
+                # by searching backwards through the ORIGINAL messages list
+                # Also build a map from tool_call_id to function name for Gemini format
+                our_tool_ids: set[str] = set()
+                tool_id_to_name: dict[str, str] = {}
+                msg_index = messages.index(msg)
+                for prev_msg in reversed(messages[:msg_index]):
+                    if prev_msg.role == MessageRole.ASSISTANT:
+                        is_ours = not prev_msg.model or prev_msg.model.lower() == self.name.lower()
+                        if is_ours and prev_msg.tool_calls:
+                            for tc in prev_msg.tool_calls:
+                                our_tool_ids.add(tc.id)
+                                tool_id_to_name[tc.id] = tc.name
+                        # Keep searching - there might be multiple assistant messages with tools
 
-                if our_tool_call:
-                    # Function responses for OUR tool calls - use Gemini format
-                    for result in msg.tool_results:
+                # Process each tool result based on ownership
+                for result in msg.tool_results:
+                    if result.tool_call_id in our_tool_ids:
+                        # Our tool call - use native Gemini format
+                        # Get function name from our mapping
+                        func_name = tool_id_to_name.get(result.tool_call_id, "unknown")
                         contents.append({
                             "role": "user",
                             "parts": [{
                                 "function_response": {
-                                    "name": msg.name or "unknown",
+                                    "name": func_name,
                                     "response": {"result": result.content},
                                 }
                             }],
                         })
-                else:
-                    # Tool results from OTHER models - convert to user message
-                    for result in msg.tool_results:
+                    else:
+                        # Other model's tool call - convert to user message
                         status = "Error" if result.is_error else "Success"
+                        content = result.content
+                        if len(content) > 2000:
+                            content = content[:1997] + "..."
                         contents.append({
                             "role": "user",
-                            "parts": [{"text": f"[Tool Result ({status})]: {result.content[:2000]}"}],
+                            "parts": [{"text": f"[Tool Result ({status})]: {content}"}],
                         })
 
         return system_instruction, contents
