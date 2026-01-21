@@ -289,10 +289,13 @@ Style: {communication_style}
 - Structure: Bullet points > paragraphs for lists
 
 === TOOL USAGE ===
+- SHARED ACCESS: All models can use tools and see each other's tool results
+- DON'T DUPLICATE: If another model already read a file, use that result
 - PARALLEL DEFAULT: Batch independent reads/searches
 - SEARCH FIRST: Never guess—find evidence in codebase
 - VERIFY: Read before edit, test before commit
-- MAX 3 RETRIES: Escalate to user if stuck"""
+- MAX 3 RETRIES: Escalate to user if stuck
+- ACT, DON'T ASK: If user mentions a path/file, read it immediately—don't ask for clarification"""
 
 
 def format_should_speak_prompt(
