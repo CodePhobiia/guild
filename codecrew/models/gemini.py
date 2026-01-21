@@ -142,17 +142,37 @@ class GeminiClient(ModelClient):
                         })
 
             elif msg.role == MessageRole.TOOL:
-                # Function responses in Gemini format
-                for result in msg.tool_results:
-                    contents.append({
-                        "role": "user",
-                        "parts": [{
-                            "function_response": {
-                                "name": msg.name or "unknown",
-                                "response": {"result": result.content},
-                            }
-                        }],
-                    })
+                # Check if this tool result is for a tool WE called
+                # by looking at the previous message
+                our_tool_call = False
+                if contents:
+                    last_msg = contents[-1]
+                    if last_msg.get("role") == "model":
+                        for part in last_msg.get("parts", []):
+                            if "function_call" in part:
+                                our_tool_call = True
+                                break
+
+                if our_tool_call:
+                    # Function responses for OUR tool calls - use Gemini format
+                    for result in msg.tool_results:
+                        contents.append({
+                            "role": "user",
+                            "parts": [{
+                                "function_response": {
+                                    "name": msg.name or "unknown",
+                                    "response": {"result": result.content},
+                                }
+                            }],
+                        })
+                else:
+                    # Tool results from OTHER models - convert to user message
+                    for result in msg.tool_results:
+                        status = "Error" if result.is_error else "Success"
+                        contents.append({
+                            "role": "user",
+                            "parts": [{"text": f"[Tool Result ({status})]: {result.content[:2000]}"}],
+                        })
 
         return system_instruction, contents
 

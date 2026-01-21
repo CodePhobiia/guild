@@ -140,12 +140,34 @@ class GrokClient(ModelClient):
                 xai_messages.append(message)
 
             elif msg.role == MessageRole.TOOL:
-                for result in msg.tool_results:
-                    xai_messages.append({
-                        "role": "tool",
-                        "tool_call_id": result.tool_call_id,
-                        "content": result.content,
-                    })
+                # Check if this tool result is for a tool WE called
+                # by looking at the previous message
+                our_tool_call = False
+                if xai_messages:
+                    last_msg = xai_messages[-1]
+                    if last_msg.get("role") == "assistant" and last_msg.get("tool_calls"):
+                        for tc in last_msg["tool_calls"]:
+                            for result in msg.tool_results:
+                                if tc.get("id") == result.tool_call_id:
+                                    our_tool_call = True
+                                    break
+
+                if our_tool_call:
+                    # Tool results for OUR tool calls - use xAI/OpenAI format
+                    for result in msg.tool_results:
+                        xai_messages.append({
+                            "role": "tool",
+                            "tool_call_id": result.tool_call_id,
+                            "content": result.content,
+                        })
+                else:
+                    # Tool results from OTHER models - convert to user message
+                    for result in msg.tool_results:
+                        status = "Error" if result.is_error else "Success"
+                        xai_messages.append({
+                            "role": "user",
+                            "content": f"[Tool Result ({status})]: {result.content[:2000]}",
+                        })
 
         return xai_messages
 
