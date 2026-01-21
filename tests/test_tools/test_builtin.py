@@ -51,11 +51,16 @@ class TestBuiltinToolRegistration:
         """Test getting built-in tools as a list."""
         tools = get_builtin_tools()
 
-        assert len(tools) == 6
+        # 6 file/shell tools + 10 git tools = 16 total
+        assert len(tools) == 16
 
         tool_names = [t.name for t in tools]
         assert "read_file" in tool_names
         assert "execute_command" in tool_names
+        # Git tools
+        assert "git_status" in tool_names
+        assert "git_diff" in tool_names
+        assert "git_commit" in tool_names
 
 
 class TestReadFileTool:

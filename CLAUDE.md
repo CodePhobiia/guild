@@ -43,7 +43,12 @@ codecrew/
 │   └── builtin/
 │       ├── __init__.py      # Built-in tool registration
 │       ├── files.py         # File operation tools (read, write, edit, list, search)
-│       └── shell.py         # Shell command execution with safety checks
+│       ├── shell.py         # Shell command execution with safety checks
+│       └── git.py           # Git tools (status, diff, log, branch, commit, etc.)
+├── git/
+│   ├── __init__.py          # Package exports
+│   ├── utils.py             # Git utilities (find_git_root, run_git_command, parsers)
+│   └── repository.py        # GitRepository class and dataclasses
 ├── conversation/
 │   ├── __init__.py          # Package exports
 │   ├── persistence.py       # DatabaseManager (SQLite via aiosqlite)
@@ -51,6 +56,31 @@ codecrew/
 │   ├── models.py            # Data models (Session, Message, etc.)
 │   ├── manager.py           # ConversationManager (high-level bridge)
 │   └── summarizer.py        # SummaryManager (automatic summarization)
+├── ui/
+│   ├── __init__.py          # Package exports (ChatApp, Theme, etc.)
+│   ├── theme.py             # Theme system with 3 themes (default, minimal, colorblind)
+│   ├── app.py               # Main ChatApp class
+│   ├── history.py           # HistoryManager, PersistentHistory (input history)
+│   ├── keybindings.py       # KeyBindingManager, configurable keyboard shortcuts
+│   ├── navigation.py        # NavigationManager, message scrolling and search
+│   ├── clipboard.py         # ClipboardManager, cross-platform clipboard support
+│   ├── components/
+│   │   ├── __init__.py      # Component exports
+│   │   ├── spinner.py       # Spinner, ThinkingIndicator, TypingIndicator
+│   │   ├── message.py       # MessageRenderer, StreamingMessage, DecisionIndicator
+│   │   ├── message_list.py  # MessageList, MessageItem
+│   │   ├── header.py        # Header, CompactHeader
+│   │   ├── status_bar.py    # StatusBar, MiniStatus
+│   │   ├── tool_panel.py    # ToolPanel, ToolCallDisplay, PermissionRequestDisplay
+│   │   └── input_area.py    # InputArea, MentionCompleter
+│   ├── handlers/
+│   │   ├── __init__.py      # Handler exports
+│   │   ├── events.py        # EventHandler, StreamingEventBuffer
+│   │   └── commands.py      # CommandHandler, Command, CommandResult (21 commands)
+│   └── dialogs/
+│       ├── __init__.py      # Dialog exports
+│       ├── permission.py    # PermissionDialog, PermissionResponse
+│       └── session_picker.py # SessionPicker, ConfirmationDialog, TextInputDialog
 └── utils/
     └── logging.py           # Logging configuration
 
@@ -72,13 +102,26 @@ tests/
 │   ├── test_context.py      # Context assembly tests
 │   ├── test_engine.py       # Integration tests
 │   └── test_persistent.py   # PersistentOrchestrator tests
-└── test_tools/
+├── test_tools/
+│   ├── __init__.py          # Test package
+│   ├── test_registry.py     # ToolRegistry tests
+│   ├── test_permissions.py  # PermissionManager tests
+│   ├── test_executor.py     # ToolExecutor tests
+│   ├── test_builtin.py      # Built-in tools tests
+│   └── test_tool_orchestrator.py # ToolEnabledOrchestrator tests
+├── test_ui/
+│   ├── __init__.py          # Test package
+│   ├── test_theme.py        # Theme system tests
+│   ├── test_components.py   # Component tests
+│   ├── test_handlers.py     # Handler tests
+│   ├── test_history.py      # HistoryManager tests
+│   ├── test_keybindings.py  # KeyBindingManager tests
+│   ├── test_navigation.py   # NavigationManager tests
+│   └── test_clipboard.py    # ClipboardManager tests
+└── test_git/
     ├── __init__.py          # Test package
-    ├── test_registry.py     # ToolRegistry tests
-    ├── test_permissions.py  # PermissionManager tests
-    ├── test_executor.py     # ToolExecutor tests
-    ├── test_builtin.py      # Built-in tools tests
-    └── test_tool_orchestrator.py # ToolEnabledOrchestrator tests
+    ├── test_utils.py        # Git utilities tests
+    └── test_repository.py   # GitRepository tests
 ```
 
 ## Implementation Status
@@ -136,11 +179,69 @@ tests/
 - Tool argument validation against JSON Schema
 - Tool result injection into conversation
 
+**Phase 6: Rich TUI Development** ✅
+- Theme system with 3 themes (default, minimal, colorblind)
+- Model-specific colors and styling
+- Unicode and ASCII symbol support with fallbacks
+- Spinner components (ThinkingIndicator, TypingIndicator, ToolExecutingIndicator)
+- MessageRenderer with markdown and syntax highlighting
+- StreamingMessage with real-time cursor
+- DecisionIndicator showing model speak/silent decisions
+- MessageList with scrolling, max messages, and streaming support
+- Header and CompactHeader components
+- StatusBar with token counts, cost tracking, and status indicators
+- ToolPanel for tool call visualization
+- InputArea with prompt_toolkit integration
+- MentionCompleter for @mentions and /commands autocomplete
+- EventHandler mapping all 14 EventTypes to UI updates
+- StreamingEventBuffer for smooth chunk aggregation
+- CommandHandler with 16 slash commands
+- PermissionDialog for tool approval workflows
+- SessionPicker for session management
+- Main ChatApp integrating all components with orchestrator
+
+**Phase 7: Commands and User Interaction** ✅
+- Persistent input history with SQLite storage (HistoryManager)
+- Separate message and command history tracking
+- PersistentHistory wrapper for prompt_toolkit integration
+- Configurable keyboard bindings system (KeyBindingManager)
+- Default bindings for navigation, copy, search, help
+- Message navigation with scroll, page up/down, jump to top/bottom
+- Message selection and multi-select support
+- Search functionality with regex pattern matching
+- Cross-platform clipboard support (Windows/macOS/Linux)
+- Copy message, code block, or entire conversation
+- 5 new slash commands (/keys, /copy, /search, /goto, /history)
+- Grouped help system with command categories
+- Database migration for input_history table
+
+**Phase 8: Git Integration** ✅
+- GitRepository class for repository operations
+- Dataclasses: GitStatus, GitCommit, GitDiff, GitBranch, GitStash, GitBlame
+- Utility functions: find_git_root, is_git_repository, run_git_command
+- Git status parsing (porcelain format)
+- 10 Git tools for AI models:
+  - git_status: Show working tree status
+  - git_diff: Show changes between commits/working tree
+  - git_log: Show commit history
+  - git_show: Show commit details
+  - git_branch: List, create, delete branches
+  - git_checkout: Switch branches or restore files
+  - git_add: Stage files for commit
+  - git_commit: Create commits
+  - git_stash: Stash and restore changes
+  - git_blame: Show file line-by-line attribution
+- 5 TUI slash commands for Git:
+  - /git: Git repository overview
+  - /status: Show working tree status
+  - /diff: Show changes with syntax highlighting
+  - /log: Show recent commits
+  - /branch: List or switch branches
+- Permission levels (SAFE for read-only, CAUTIOUS for modifications)
+- Comprehensive test suite (93 tests)
+
 ### Remaining Phases
 
-- Phase 6: Rich TUI Development
-- Phase 7: Commands and User Interaction
-- Phase 8: Git Integration
 - Phase 9: Polish, Security, Error Handling
 - Phase 10: Testing, Documentation, Launch
 
@@ -175,13 +276,14 @@ pytest tests/test_orchestrator/test_engine.py -v
 pytest tests/ --cov=codecrew
 ```
 
-Current: **371 tests passing**
+Current: **735 tests passing**
 
 ## Dependencies
 
 Core:
 - `typer[all]` - CLI framework
 - `rich` - Terminal formatting
+- `prompt_toolkit` - Advanced input handling with autocomplete
 - `pydantic` + `pydantic-settings` - Configuration
 - `aiosqlite` - Async SQLite
 - `pyyaml` - YAML config files
@@ -336,3 +438,215 @@ registry.register(tool)
 - **CAUTIOUS**: Requires confirmation by default (e.g., write_file)
 - **DANGEROUS**: Always requires explicit approval (e.g., execute_command)
 - **BLOCKED**: Completely blocked, cannot be executed (e.g., `rm -rf /`)
+
+### Using the TUI
+The TUI provides a rich interactive interface for conversations:
+
+```python
+from codecrew.ui import ChatApp, create_chat_app
+
+# Create the TUI app
+app = await create_chat_app(
+    orchestrator=orchestrator,
+    theme="default",  # or "minimal", "colorblind"
+)
+
+# Run the app
+await app.run()
+```
+
+**Available Themes:**
+- `default`: Vibrant colors with distinct model identities
+- `minimal`: Reduced colors for distraction-free work
+- `colorblind`: High-contrast colors optimized for color vision deficiency
+
+**Slash Commands:**
+
+*Session:*
+- `/new [name]` - Start a new session
+- `/sessions` - List all sessions
+- `/load <id>` - Load a session
+- `/save` - Save current session
+- `/export <format>` - Export conversation (json/markdown)
+
+*Display:*
+- `/clear` - Clear the screen
+- `/compact` - Toggle compact mode
+- `/decisions` - Toggle decision visibility
+- `/theme <name>` - Switch theme
+
+*Navigation:*
+- `/search <query>` - Search messages
+- `/goto <index|id>` - Jump to a message
+- `/history` - Show input history
+
+*Information:*
+- `/help` - Show help information
+- `/models` - Show available models
+- `/config` - Show current configuration
+- `/stats` - Show conversation statistics
+- `/keys` - Show keyboard shortcuts
+
+*Messages:*
+- `/pin <msg_id>` - Pin a message
+- `/unpin <msg_id>` - Unpin a message
+- `/copy [msg_id]` - Copy message to clipboard
+
+*Git:*
+- `/git` - Git repository overview
+- `/status` - Show working tree status
+- `/diff [--staged] [file]` - Show changes
+- `/log [limit]` - Show recent commits
+- `/branch [name]` - List or switch branches
+
+*System:*
+- `/quit` - Exit the application
+
+**@Mentions:**
+- `@claude` - Direct message to Claude
+- `@gpt` - Direct message to GPT
+- `@gemini` - Direct message to Gemini
+- `@grok` - Direct message to Grok
+- `@all` - Message all models
+
+**Keyboard Shortcuts:**
+- `Ctrl+C` - Copy selected message
+- `Ctrl+F` - Search messages
+- `Ctrl+G` - Go to message
+- `Ctrl+H` - Show history
+- `Up/Down` - Navigate messages
+- `Page Up/Down` - Scroll page
+- `Home/End` - Jump to first/last message
+- `Escape` - Clear selection
+- `F1` - Show help
+
+### Using Clipboard
+The clipboard system works cross-platform:
+
+```python
+from codecrew.ui import ClipboardManager, copy_to_clipboard
+
+# Check if clipboard is available
+if ClipboardManager.is_available():
+    # Copy text
+    ClipboardManager.copy("Hello, world!")
+
+    # Copy a message with role prefix
+    ClipboardManager.copy_message("How can I help?", role="assistant")
+
+    # Copy a code block with language
+    ClipboardManager.copy_code_block("print('hello')", language="python")
+
+    # Copy entire conversation
+    messages = [("user", "Hi"), ("assistant", "Hello!")]
+    ClipboardManager.copy_conversation(messages)
+```
+
+### Using Navigation
+Navigate through messages programmatically:
+
+```python
+from codecrew.ui import NavigationManager
+
+# Create navigation manager
+nav = NavigationManager(
+    get_messages=lambda: app.messages,
+    viewport_height=20,
+)
+
+# Scroll and navigate
+nav.scroll_down(5)
+nav.page_up()
+nav.to_top()
+
+# Select messages
+nav.select_message(0)
+nav.select_next()
+
+# Search
+match_count = nav.search("error")
+if match_count > 0:
+    result = nav.current_match()
+    print(f"Found at message {result.message_index}")
+```
+
+### Using Input History
+Manage persistent command/message history:
+
+```python
+from codecrew.ui import HistoryManager, PersistentHistory
+
+# Create history manager
+history = HistoryManager(db_path="~/.codecrew/history.db")
+
+# Add entries
+await history.add_entry("hello world", entry_type="message")
+await history.add_entry("/help", entry_type="command")
+
+# Get recent entries
+recent = await history.get_recent(limit=50, entry_type="message")
+
+# Search history
+results = await history.search("hello")
+
+# For prompt_toolkit integration
+persistent = PersistentHistory(history, entry_type="message")
+await persistent.load()
+```
+
+### Using Git Integration
+The Git module provides repository operations for AI tools:
+
+```python
+from codecrew.git import GitRepository, find_git_root, is_git_repository
+from codecrew.tools.builtin.git import get_git_tools, register_git_tools
+
+# Check if in a git repository
+if is_git_repository("."):
+    repo = GitRepository.find(".")
+
+    # Get repository status
+    status = repo.get_status()
+    print(f"Branch: {status.branch}")
+    print(f"Clean: {status.is_clean}")
+    print(f"Staged: {status.staged}")
+    print(f"Modified: {status.modified}")
+
+    # View recent commits
+    commits = repo.get_log(limit=5)
+    for commit in commits:
+        print(commit.one_line())
+
+    # Get diff
+    diff = repo.get_diff()
+    print(diff.summary())
+
+    # Branch operations
+    branches = repo.get_branches()
+    current = repo.get_current_branch()
+    repo.checkout("feature-branch", create=True)
+
+    # Stash operations
+    stashes = repo.stash_list()
+    repo.stash_push(message="WIP")
+    repo.stash_pop()
+
+# Register Git tools for AI models
+registry = ToolRegistry()
+register_git_tools(registry)
+
+# Or get as a list
+git_tools = get_git_tools()  # Returns 10 Git tools
+```
+
+**Git Tools for AI Models:**
+- `git_status` (SAFE): View working tree status
+- `git_diff` (SAFE): View changes between commits
+- `git_log` (SAFE): View commit history
+- `git_show` (SAFE): View commit details
+- `git_blame` (SAFE): View line-by-line file attribution
+- `git_branch` (CAUTIOUS): List, create, delete branches
+- `git_checkout` (CAUTIOUS): Switch branches or restore files
+- `git_add` (CAUTIOUS): Stage files for commit
+- `git_commit` (CAUTIOUS): Create commits
+- `git_stash` (CAUTIOUS): Stash and restore changes
