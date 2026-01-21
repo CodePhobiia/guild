@@ -16,7 +16,7 @@ It provides:
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Callable, Optional, Set
 
 from codecrew.models.base import ModelClient
@@ -262,7 +262,7 @@ class ConversationManager:
 
         existing_metadata = json.loads(session_row["metadata"]) if session_row["metadata"] else {}
         existing_metadata["archived"] = True
-        existing_metadata["archived_at"] = datetime.utcnow().isoformat()
+        existing_metadata["archived_at"] = datetime.now(UTC).isoformat()
 
         await self.db.update_session(target_id, metadata=existing_metadata)
 

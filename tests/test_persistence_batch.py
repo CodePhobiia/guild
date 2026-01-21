@@ -1,7 +1,7 @@
 """Tests for DatabaseManager batch operations and statistics."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -339,8 +339,8 @@ class TestDateRangeQuery:
         )
 
         # Query with a range that includes now
-        start = datetime.utcnow() - timedelta(hours=1)
-        end = datetime.utcnow() + timedelta(hours=1)
+        start = datetime.now(UTC) - timedelta(hours=1)
+        end = datetime.now(UTC) + timedelta(hours=1)
 
         results = await db_manager.get_messages_in_date_range(
             session_id, start, end
@@ -354,8 +354,8 @@ class TestDateRangeQuery:
     ) -> None:
         """Test date range query with no results."""
         # Query a range in the past that shouldn't have any messages
-        start = datetime.utcnow() - timedelta(days=365)
-        end = datetime.utcnow() - timedelta(days=364)
+        start = datetime.now(UTC) - timedelta(days=365)
+        end = datetime.now(UTC) - timedelta(days=364)
 
         results = await db_manager.get_messages_in_date_range(
             session_with_messages, start, end

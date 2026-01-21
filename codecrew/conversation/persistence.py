@@ -2,7 +2,7 @@
 
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
@@ -135,7 +135,7 @@ class DatabaseManager:
         Returns:
             Created session as dictionary
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         metadata_json = json.dumps(metadata) if metadata else None
 
         async with self.connect() as conn:
@@ -172,7 +172,7 @@ class DatabaseManager:
         metadata: Optional[dict] = None,
     ) -> Optional[dict]:
         """Update a session."""
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         updates = ["updated_at = ?"]
         params: list[Any] = [now]
@@ -229,7 +229,7 @@ class DatabaseManager:
         cost_estimate: Optional[float] = None,
     ) -> dict:
         """Add a message to a session."""
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         async with self.connect() as conn:
             await conn.execute(
@@ -272,7 +272,7 @@ class DatabaseManager:
 
     async def pin_message(self, session_id: str, message_id: str, pin_id: str) -> None:
         """Pin a message to a session's context."""
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self.connect() as conn:
             # Update message is_pinned flag
             await conn.execute(
@@ -323,7 +323,7 @@ class DatabaseManager:
         status: str = "pending",
     ) -> dict:
         """Add a tool call record."""
-        now = datetime.utcnow().isoformat() if status != "pending" else None
+        now = datetime.now(UTC).isoformat() if status != "pending" else None
 
         async with self.connect() as conn:
             await conn.execute(
@@ -357,7 +357,7 @@ class DatabaseManager:
         status: Optional[str] = None,
     ) -> Optional[dict]:
         """Update a tool call with result and status."""
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         updates = ["executed_at = ?"]
         params: list[Any] = [now]
@@ -412,7 +412,7 @@ class DatabaseManager:
         if not messages:
             return []
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         session_ids = set()
 
         async with self.connect() as conn:
@@ -470,7 +470,7 @@ class DatabaseManager:
 
         async with self.connect() as conn:
             for tc in tool_calls:
-                executed_at = datetime.utcnow().isoformat() if tc.get("status") != "pending" else None
+                executed_at = datetime.now(UTC).isoformat() if tc.get("status") != "pending" else None
                 await conn.execute(
                     """
                     INSERT INTO tool_calls
@@ -667,7 +667,7 @@ class DatabaseManager:
         Returns:
             Created summary as dictionary
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         async with self.connect() as conn:
             await conn.execute(
