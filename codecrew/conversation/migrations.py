@@ -182,8 +182,53 @@ async def migration_002_add_summaries_table(conn: aiosqlite.Connection) -> None:
     )
 
 
-# Future migrations can be added here:
-# @migration(3)
-# async def migration_003_add_some_feature(conn: aiosqlite.Connection) -> None:
-#     """Add some new feature."""
-#     await conn.execute("ALTER TABLE sessions ADD COLUMN new_field TEXT")
+@migration(3)
+async def migration_003_add_history_and_settings(conn: aiosqlite.Connection) -> None:
+    """Add tables for input history, command aliases, and key bindings."""
+
+    # Input history table
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS input_history (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            session_id TEXT,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+        )
+        """
+    )
+
+    # Indexes for efficient history queries
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_timestamp ON input_history(timestamp DESC)"
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_type ON input_history(entry_type)"
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_session ON input_history(session_id)"
+    )
+
+    # Command aliases table
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS command_aliases (
+            name TEXT PRIMARY KEY,
+            command TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+    # Custom key bindings table
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS key_bindings (
+            key TEXT PRIMARY KEY,
+            action TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )

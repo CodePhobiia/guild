@@ -264,6 +264,224 @@ LIST_DIRECTORY_TOOL = ToolDefinition(
     ],
 )
 
+# Git tools
+GIT_STATUS_TOOL = ToolDefinition(
+    name="git_status",
+    description="Get the current git repository status including branch, staged/unstaged changes, and untracked files",
+    parameters=[
+        ToolParameter(
+            name="path",
+            type="string",
+            description="Path to the repository (optional, uses current directory)",
+            required=False,
+        ),
+    ],
+)
+
+GIT_DIFF_TOOL = ToolDefinition(
+    name="git_diff",
+    description="Show changes between commits, commit and working tree, etc.",
+    parameters=[
+        ToolParameter(
+            name="staged",
+            type="boolean",
+            description="Show staged changes instead of unstaged",
+            required=False,
+        ),
+        ToolParameter(
+            name="file",
+            type="string",
+            description="Specific file to diff",
+            required=False,
+        ),
+        ToolParameter(
+            name="commit",
+            type="string",
+            description="Compare with specific commit (e.g., HEAD~1, abc123)",
+            required=False,
+        ),
+    ],
+)
+
+GIT_LOG_TOOL = ToolDefinition(
+    name="git_log",
+    description="Show commit history",
+    parameters=[
+        ToolParameter(
+            name="limit",
+            type="integer",
+            description="Maximum number of commits to show (default: 10)",
+            required=False,
+        ),
+        ToolParameter(
+            name="file",
+            type="string",
+            description="Show history for specific file",
+            required=False,
+        ),
+        ToolParameter(
+            name="author",
+            type="string",
+            description="Filter by author",
+            required=False,
+        ),
+        ToolParameter(
+            name="since",
+            type="string",
+            description="Show commits since date (e.g., '2024-01-01', '1 week ago')",
+            required=False,
+        ),
+    ],
+)
+
+GIT_SHOW_TOOL = ToolDefinition(
+    name="git_show",
+    description="Show details of a specific commit",
+    parameters=[
+        ToolParameter(
+            name="commit",
+            type="string",
+            description="Commit hash or reference (e.g., HEAD, abc123, main~2)",
+            required=False,
+        ),
+        ToolParameter(
+            name="stat",
+            type="boolean",
+            description="Show diffstat instead of full diff",
+            required=False,
+        ),
+    ],
+)
+
+GIT_BRANCH_TOOL = ToolDefinition(
+    name="git_branch",
+    description="List, create, or delete branches",
+    parameters=[
+        ToolParameter(
+            name="action",
+            type="string",
+            description="Action to perform",
+            enum=["list", "create", "delete", "current"],
+        ),
+        ToolParameter(
+            name="name",
+            type="string",
+            description="Branch name (for create/delete)",
+            required=False,
+        ),
+        ToolParameter(
+            name="all",
+            type="boolean",
+            description="Include remote branches (for list)",
+            required=False,
+        ),
+        ToolParameter(
+            name="force",
+            type="boolean",
+            description="Force delete even if not merged",
+            required=False,
+        ),
+    ],
+)
+
+GIT_CHECKOUT_TOOL = ToolDefinition(
+    name="git_checkout",
+    description="Switch branches or restore working tree files",
+    parameters=[
+        ToolParameter(
+            name="target",
+            type="string",
+            description="Branch name or commit to checkout",
+        ),
+        ToolParameter(
+            name="create",
+            type="boolean",
+            description="Create branch if it doesn't exist (-b flag)",
+            required=False,
+        ),
+    ],
+)
+
+GIT_ADD_TOOL = ToolDefinition(
+    name="git_add",
+    description="Add file contents to the staging area",
+    parameters=[
+        ToolParameter(
+            name="files",
+            type="array",
+            description="Files to add (use ['.'] for all)",
+            items={"type": "string"},
+        ),
+    ],
+)
+
+GIT_COMMIT_TOOL = ToolDefinition(
+    name="git_commit",
+    description="Record changes to the repository",
+    parameters=[
+        ToolParameter(
+            name="message",
+            type="string",
+            description="Commit message",
+        ),
+        ToolParameter(
+            name="all",
+            type="boolean",
+            description="Automatically stage modified/deleted files (-a flag)",
+            required=False,
+        ),
+    ],
+)
+
+GIT_STASH_TOOL = ToolDefinition(
+    name="git_stash",
+    description="Stash changes in working directory",
+    parameters=[
+        ToolParameter(
+            name="action",
+            type="string",
+            description="Stash action",
+            enum=["push", "pop", "list", "show", "drop"],
+        ),
+        ToolParameter(
+            name="message",
+            type="string",
+            description="Message for stash push",
+            required=False,
+        ),
+        ToolParameter(
+            name="index",
+            type="integer",
+            description="Stash index for pop/show/drop (default: 0)",
+            required=False,
+        ),
+    ],
+)
+
+GIT_BLAME_TOOL = ToolDefinition(
+    name="git_blame",
+    description="Show what revision and author last modified each line of a file",
+    parameters=[
+        ToolParameter(
+            name="file",
+            type="string",
+            description="File to blame",
+        ),
+        ToolParameter(
+            name="start_line",
+            type="integer",
+            description="Starting line number",
+            required=False,
+        ),
+        ToolParameter(
+            name="end_line",
+            type="integer",
+            description="Ending line number",
+            required=False,
+        ),
+    ],
+)
+
 # All default tools
 DEFAULT_TOOLS = [
     READ_FILE_TOOL,
@@ -272,4 +490,18 @@ DEFAULT_TOOLS = [
     EXECUTE_COMMAND_TOOL,
     SEARCH_FILES_TOOL,
     LIST_DIRECTORY_TOOL,
+]
+
+# Git tools (separate list for optional registration)
+GIT_TOOLS = [
+    GIT_STATUS_TOOL,
+    GIT_DIFF_TOOL,
+    GIT_LOG_TOOL,
+    GIT_SHOW_TOOL,
+    GIT_BRANCH_TOOL,
+    GIT_CHECKOUT_TOOL,
+    GIT_ADD_TOOL,
+    GIT_COMMIT_TOOL,
+    GIT_STASH_TOOL,
+    GIT_BLAME_TOOL,
 ]

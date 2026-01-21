@@ -109,25 +109,75 @@ async def start_interactive(
         )
         raise typer.Exit(1)
 
-    # Show welcome message
-    console.print()
-    console.print(
-        Panel(
-            f"[bold]Welcome to CodeCrew![/bold]\n\n"
-            f"Available models: {', '.join(available_models)}\n"
-            f"Type your message to start chatting.\n"
-            f"Use @claude, @gpt, @gemini, @grok to mention specific models.\n"
-            f"Type /help for commands, /quit to exit.",
-            title=f"CodeCrew v{__version__}",
-            border_style="blue",
-        )
+    # Import and create the TUI app
+    from codecrew.conversation import ConversationManager
+    from codecrew.models import create_model_clients
+    from codecrew.orchestrator import create_persistent_orchestrator
+    from codecrew.tools import (
+        PermissionManager,
+        ToolExecutor,
+        ToolRegistry,
+        register_builtin_tools,
     )
-    console.print()
+    from codecrew.ui import ChatApp
 
-    # TODO: Implement full interactive loop in Phase 6 (TUI)
-    # For now, just show a placeholder
-    console.print("[dim]Interactive mode will be fully implemented in Phase 6.[/dim]")
-    console.print("[dim]Run 'codecrew --help' to see available commands.[/dim]")
+    try:
+        # Create model clients
+        clients = create_model_clients(settings)
+
+        # Create tool system
+        registry = ToolRegistry()
+        register_builtin_tools(registry)
+        permissions = PermissionManager(auto_approve=False)
+        executor = ToolExecutor(registry=registry, permissions=permissions)
+
+        # Create orchestrator with persistence and tools
+        from codecrew.orchestrator.tool_orchestrator import ToolEnabledOrchestrator
+
+        # First create base persistent orchestrator
+        base_orchestrator = await create_persistent_orchestrator(
+            clients=clients,
+            settings=settings,
+            db_path=settings.storage.resolved_database_path,
+            enable_summarization=True,
+        )
+
+        # Wrap with tool capabilities
+        orchestrator = ToolEnabledOrchestrator(
+            clients=clients,
+            settings=settings,
+            tool_executor=executor,
+            tool_registry=registry,
+        )
+
+        # Create conversation manager for the app
+        conversation_manager = ConversationManager(
+            db=db,
+            orchestrator=base_orchestrator,
+        )
+
+        # Create and run the TUI app
+        app = ChatApp(
+            settings=settings,
+            orchestrator=orchestrator,
+            conversation_manager=conversation_manager,
+            resume_session=resume,
+            theme_name=settings.ui.theme,  # type: ignore
+        )
+
+        await app.run()
+
+    except ImportError as e:
+        # Fallback if TUI components have import issues
+        console.print(f"[red]Error loading TUI: {e}[/red]")
+        console.print("[dim]Run 'codecrew --help' to see available commands.[/dim]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        if verbose:
+            import traceback
+            console.print(traceback.format_exc())
+        raise typer.Exit(1)
 
 
 @app.command()

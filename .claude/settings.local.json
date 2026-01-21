@@ -4,7 +4,10 @@
       "Bash(python -m pytest:*)",
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Implement CodeCrew Phases 1-4\n\nComplete implementation of AI coding groupchat CLI through Phase 4:\n\nPhase 1 - Foundation:\n- Project structure with pyproject.toml\n- Pydantic settings and config loading\n- SQLite database with async operations\n- Schema migrations system\n- Typer CLI skeleton\n\nPhase 2 - Model Clients:\n- Unified Message, ModelResponse, StreamChunk types\n- ModelClient ABC with retry logic\n- Claude, GPT, Gemini, Grok client implementations\n- Streaming support for all providers\n- ToolDefinition with provider format conversions\n\nPhase 3 - Orchestration Engine:\n- Event-driven architecture \\(OrchestratorEvent\\)\n- @mention parsing and routing\n- Parallel \"should speak?\" evaluation\n- Turn management strategies \\(rotate, confidence, fixed\\)\n- Context assembly with token limits and pinning\n\nPhase 4 - Conversation Management:\n- ConversationManager bridging Orchestrator and DatabaseManager\n- PersistentOrchestrator with automatic persistence\n- SummaryManager with automatic summarization triggers\n- Session lifecycle \\(create, load, switch, archive\\)\n- Bidirectional pin synchronization\n- Export/import \\(JSON, Markdown\\)\n- Batch database operations\n\n267 tests passing.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   }
 }
