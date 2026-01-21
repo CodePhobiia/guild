@@ -22,7 +22,8 @@ from .prompts import format_should_speak_prompt
 logger = logging.getLogger(__name__)
 
 # Timeout for "should speak?" evaluation per model
-EVALUATION_TIMEOUT = 5.0  # seconds
+# Note: 15 seconds accommodates API latency, especially for first requests
+EVALUATION_TIMEOUT = 15.0  # seconds
 
 # Default silence threshold - models below this confidence stay silent
 DEFAULT_SILENCE_THRESHOLD = 0.3
