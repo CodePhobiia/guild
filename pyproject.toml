@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codecrew"
+name = "codecrew-ai"
 version = "1.0.0"
 description = "AI Coding Groupchat CLI - Multiple AI models collaborating in a group chat"
 readme = "README.md"
