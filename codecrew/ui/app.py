@@ -77,6 +77,7 @@ class ChatApp:
         self.show_decisions = settings.ui.show_silent_models
         self._current_session_id: Optional[str] = None
         self._current_session_name: Optional[str] = None
+        self._live_context: Optional[Live] = None  # For streaming display
 
         # Initialize components
         self._init_components()
@@ -290,6 +291,7 @@ class ChatApp:
             message: User message
         """
         self.status_bar.set_status("thinking")
+        self._live_context: Optional[Live] = None
 
         try:
             # Start thinking indicator
@@ -304,6 +306,11 @@ class ChatApp:
             self.message_list.add_error(str(e))
             self.status_bar.set_status("error", message=str(e))
             self.console.print(f"[red]Error: {e}[/red]")
+        finally:
+            # Clean up live context if still active
+            if self._live_context is not None:
+                self._live_context.stop()
+                self._live_context = None
 
     async def _handle_event(self, event: OrchestratorEvent) -> None:
         """Handle an orchestrator event.
@@ -316,20 +323,35 @@ class ChatApp:
 
         # Update display for key events
         if event.type == EventType.RESPONSE_CHUNK:
-            # Update streaming display
+            # Update streaming display using Live for proper multi-line refresh
             if self.message_list._streaming:
-                self.console.print(
-                    self.message_list._streaming.render(),
-                    end="\r",
-                )
+                if self._live_context is None:
+                    # Start a new Live context for streaming
+                    self._live_context = Live(
+                        self.message_list._streaming.render(),
+                        console=self.console,
+                        refresh_per_second=10,
+                        transient=True,  # Will be replaced when complete
+                    )
+                    self._live_context.start()
+                else:
+                    # Update the existing Live context
+                    self._live_context.update(self.message_list._streaming.render())
         elif event.type == EventType.RESPONSE_COMPLETE:
+            # Stop Live context and show final message
+            if self._live_context is not None:
+                self._live_context.stop()
+                self._live_context = None
             # Show complete message
             if self.message_list._items:
-                self.console.print()  # New line after streaming
                 self.console.print(self.message_list._render_item(
                     self.message_list._items[-1]
                 ))
         elif event.type == EventType.TOOL_CALL:
+            # Stop any active streaming before showing tool call
+            if self._live_context is not None:
+                self._live_context.stop()
+                self._live_context = None
             # Show tool call
             if self.message_list._items:
                 self.console.print(self.message_list._render_item(
@@ -342,6 +364,10 @@ class ChatApp:
                     self.message_list._items[-1]
                 ))
         elif event.type == EventType.ERROR:
+            # Stop any active streaming before showing error
+            if self._live_context is not None:
+                self._live_context.stop()
+                self._live_context = None
             self.console.print(f"[red]Error: {event.error}[/red]")
         elif event.type == EventType.TURN_COMPLETE:
             # Show turn summary
