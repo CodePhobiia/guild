@@ -91,6 +91,7 @@ dmypy.json
 # Config with secrets
 config.yaml
 !codecrew/config/defaults.yaml
+API_KEYS.txt
 
 # OS
 .DS_Store

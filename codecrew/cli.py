@@ -111,7 +111,7 @@ async def start_interactive(
 
     # Import and create the TUI app
     from codecrew.conversation import ConversationManager
-    from codecrew.models import create_model_clients
+    from codecrew.models import get_available_clients
     from codecrew.orchestrator import create_persistent_orchestrator
     from codecrew.tools import (
         PermissionManager,
@@ -123,7 +123,7 @@ async def start_interactive(
 
     try:
         # Create model clients
-        clients = create_model_clients(settings)
+        clients = get_available_clients(settings)
 
         # Create tool system
         registry = ToolRegistry()
@@ -151,10 +151,7 @@ async def start_interactive(
         )
 
         # Create conversation manager for the app
-        conversation_manager = ConversationManager(
-            db=db,
-            orchestrator=base_orchestrator,
-        )
+        conversation_manager = ConversationManager(db=db)
 
         # Create and run the TUI app
         app = ChatApp(

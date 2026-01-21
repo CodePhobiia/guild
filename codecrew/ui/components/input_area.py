@@ -204,10 +204,23 @@ class InputArea:
         Returns:
             PTStyle instance
         """
-        # Get colors from theme
-        model_colors = {
-            m: self.theme.get_model_color(m) for m in self.models
+        # Map Rich color names to prompt_toolkit compatible colors
+        # prompt_toolkit uses ANSI color names or hex codes
+        color_map = {
+            "orange3": "#d75f00",  # Rich orange3 -> hex
+            "green": "ansigreen",
+            "blue": "ansiblue",
+            "purple": "ansipurple",
+            "bright_white": "ansibrightwhite",
+            "grey50": "ansigray",
+            "yellow": "ansiyellow",
         }
+
+        # Get colors from theme and convert to prompt_toolkit compatible
+        model_colors = {}
+        for m in self.models:
+            rich_color = self.theme.get_model_color(m)
+            model_colors[m] = color_map.get(rich_color, rich_color)
 
         # Build style dictionary
         style_dict = {
