@@ -649,6 +649,7 @@ async def create_chat_app(
     """
     from codecrew.conversation import ConversationManager, DatabaseManager
     from codecrew.models import create_model_clients
+    from codecrew.models.types import ToolCall as ToolCallType
     from codecrew.orchestrator import create_tool_enabled_orchestrator
     from codecrew.tools import (
         PermissionManager,
@@ -656,6 +657,7 @@ async def create_chat_app(
         ToolRegistry,
         register_builtin_tools,
     )
+    from codecrew.tools.permissions import PermissionRequest
 
     # Initialize database
     db = DatabaseManager(settings.storage.resolved_database_path)
@@ -692,5 +694,54 @@ async def create_chat_app(
         resume_session=resume_session,
         theme_name=settings.ui.theme,  # type: ignore
     )
+
+    # Wire up the confirmation callback for tool permissions
+    # This bridges the synchronous PermissionManager.check_permission() to the TUI dialog
+    def confirmation_callback(request: PermissionRequest) -> bool:
+        """Synchronous callback to request user confirmation for tool execution.
+
+        Args:
+            request: Permission request with tool details
+
+        Returns:
+            True if user grants permission, False otherwise
+        """
+        # Create a ToolCall object for the dialog
+        tool_call = ToolCallType(
+            id=f"perm_{request.tool_name}",
+            name=request.tool_name,
+            arguments=request.arguments,
+        )
+
+        # Show the permission dialog synchronously
+        response = app.permission_dialog.show_sync(
+            model="AI",  # We don't track which model at this point
+            tool_call=tool_call,
+            permission_level=request.permission_level.value,
+            reason=request.description,
+        )
+
+        # Handle the response
+        if response == PermissionResponse.ALLOW:
+            return True
+        elif response == PermissionResponse.ALWAYS:
+            # Grant permanent permission for this tool
+            permissions.set_tool_permission(
+                request.tool_name,
+                permissions.auto_approve_level,  # Make it auto-approve
+            )
+            return True
+        elif response == PermissionResponse.ALLOW_SESSION:
+            # Session permission is automatically granted in check_permission
+            # when the callback returns True
+            return True
+        elif response == PermissionResponse.NEVER:
+            # Block this tool
+            permissions.block_tool(request.tool_name)
+            return False
+        else:  # DENY
+            return False
+
+    permissions.set_confirmation_callback(confirmation_callback)
 
     return app
