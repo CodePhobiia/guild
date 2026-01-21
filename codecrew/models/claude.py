@@ -63,7 +63,7 @@ class ClaudeClient(ModelClient):
         return self._client
 
     def _default_model_id(self) -> str:
-        return "claude-sonnet-4-20250514"
+        return "claude-opus-4-5-20251101"
 
     @property
     def is_available(self) -> bool:
@@ -90,25 +90,38 @@ class ClaudeClient(ModelClient):
                 anthropic_messages.append({"role": "user", "content": msg.content})
 
             elif msg.role == MessageRole.ASSISTANT:
-                content: list[dict[str, Any]] = []
+                # Check if this is from another model
+                is_other_model = msg.model and msg.model.lower() != self.name.lower()
 
-                # Add text content if present
-                if msg.content:
-                    content.append({"type": "text", "text": msg.content})
-
-                # Add tool use blocks if present
-                for tc in msg.tool_calls:
-                    content.append({
-                        "type": "tool_use",
-                        "id": tc.id,
-                        "name": tc.name,
-                        "input": tc.arguments,
+                if is_other_model:
+                    # Other model's response - represent as a user message
+                    # reporting what the other model said. This prevents Claude
+                    # from thinking it said things that other models said.
+                    anthropic_messages.append({
+                        "role": "user",
+                        "content": f"[{msg.model} says]: {msg.content}",
                     })
+                else:
+                    # Our own previous response
+                    content: list[dict[str, Any]] = []
 
-                anthropic_messages.append({
-                    "role": "assistant",
-                    "content": content if content else msg.content,
-                })
+                    # Add text content if present
+                    if msg.content:
+                        content.append({"type": "text", "text": msg.content})
+
+                    # Add tool use blocks if present
+                    for tc in msg.tool_calls:
+                        content.append({
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "input": tc.arguments,
+                        })
+
+                    anthropic_messages.append({
+                        "role": "assistant",
+                        "content": content if content else msg.content,
+                    })
 
             elif msg.role == MessageRole.TOOL:
                 # Tool results in Anthropic format

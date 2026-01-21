@@ -76,7 +76,7 @@ class GPTClient(ModelClient):
         return self._encoding
 
     def _default_model_id(self) -> str:
-        return "gpt-4o"
+        return "gpt-5.2-codex"
 
     @property
     def is_available(self) -> bool:
@@ -100,26 +100,39 @@ class GPTClient(ModelClient):
                 openai_messages.append({"role": "user", "content": msg.content})
 
             elif msg.role == MessageRole.ASSISTANT:
-                message: dict[str, Any] = {
-                    "role": "assistant",
-                    "content": msg.content or None,
-                }
+                # Check if this is from another model
+                is_other_model = msg.model and msg.model.lower() != self.name.lower()
 
-                # Add tool calls if present
-                if msg.tool_calls:
-                    message["tool_calls"] = [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.name,
-                                "arguments": json.dumps(tc.arguments),
-                            },
-                        }
-                        for tc in msg.tool_calls
-                    ]
+                if is_other_model:
+                    # Other model's response - represent as a user message
+                    # reporting what the other model said. This prevents the model
+                    # from thinking it said things that other models said.
+                    openai_messages.append({
+                        "role": "user",
+                        "content": f"[{msg.model} says]: {msg.content}",
+                    })
+                else:
+                    # Our own previous response
+                    message: dict[str, Any] = {
+                        "role": "assistant",
+                        "content": msg.content or None,
+                    }
 
-                openai_messages.append(message)
+                    # Add tool calls if present
+                    if msg.tool_calls:
+                        message["tool_calls"] = [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": json.dumps(tc.arguments),
+                                },
+                            }
+                            for tc in msg.tool_calls
+                        ]
+
+                    openai_messages.append(message)
 
             elif msg.role == MessageRole.TOOL:
                 # Tool results in OpenAI format

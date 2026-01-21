@@ -79,7 +79,7 @@ class GeminiClient(ModelClient):
         return self._async_client
 
     def _default_model_id(self) -> str:
-        return "gemini-2.0-flash"
+        return "gemini-3-pro-latest"
 
     @property
     def is_available(self) -> bool:
@@ -108,25 +108,38 @@ class GeminiClient(ModelClient):
                 })
 
             elif msg.role == MessageRole.ASSISTANT:
-                parts = []
+                # Check if this is from another model
+                is_other_model = msg.model and msg.model.lower() != self.name.lower()
 
-                if msg.content:
-                    parts.append({"text": msg.content})
-
-                # Add function calls if present
-                for tc in msg.tool_calls:
-                    parts.append({
-                        "function_call": {
-                            "name": tc.name,
-                            "args": tc.arguments,
-                        }
-                    })
-
-                if parts:
+                if is_other_model:
+                    # Other model's response - represent as a user message
+                    # reporting what the other model said. This prevents Gemini
+                    # from thinking it said things that other models said.
                     contents.append({
-                        "role": "model",
-                        "parts": parts,
+                        "role": "user",
+                        "parts": [{"text": f"[{msg.model} says]: {msg.content}"}],
                     })
+                else:
+                    # Our own previous response
+                    parts = []
+
+                    if msg.content:
+                        parts.append({"text": msg.content})
+
+                    # Add function calls if present
+                    for tc in msg.tool_calls:
+                        parts.append({
+                            "function_call": {
+                                "name": tc.name,
+                                "args": tc.arguments,
+                            }
+                        })
+
+                    if parts:
+                        contents.append({
+                            "role": "model",
+                            "parts": parts,
+                        })
 
             elif msg.role == MessageRole.TOOL:
                 # Function responses in Gemini format

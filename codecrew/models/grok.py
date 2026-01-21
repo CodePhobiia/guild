@@ -81,7 +81,7 @@ class GrokClient(ModelClient):
         return self._client
 
     def _default_model_id(self) -> str:
-        return "grok-3"
+        return "grok-4-1-fast"
 
     @property
     def is_available(self) -> bool:
@@ -106,6 +106,19 @@ class GrokClient(ModelClient):
                 xai_messages.append({"role": "user", "content": msg.content})
 
             elif msg.role == MessageRole.ASSISTANT:
+                # Check if this is from another model
+                is_other_model = msg.model and msg.model.lower() != self.name.lower()
+
+                if is_other_model:
+                    # Other model's response - represent as a user message
+                    # reporting what the other model said. This prevents the model
+                    # from thinking it said things that other models said.
+                    xai_messages.append({
+                        "role": "user",
+                        "content": f"[{msg.model} says]: {msg.content}",
+                    })
+                    continue
+
                 message: dict[str, Any] = {
                     "role": "assistant",
                     "content": msg.content or None,

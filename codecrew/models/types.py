@@ -182,19 +182,26 @@ class ShouldSpeakResult:
 # Cost per million tokens for various models (approximate)
 MODEL_COSTS = {
     # Claude models (input/output per million tokens)
+    "claude-opus-4-5-20251101": (5.0, 25.0),
     "claude-opus-4-20250514": (15.0, 75.0),
     "claude-sonnet-4-20250514": (3.0, 15.0),
     "claude-3-5-sonnet-20241022": (3.0, 15.0),
     "claude-3-5-haiku-20241022": (0.25, 1.25),
     # GPT models
+    "gpt-5.2-codex": (3.0, 12.0),
+    "gpt-5.2": (2.5, 10.0),
     "gpt-4o": (2.5, 10.0),
     "gpt-4o-mini": (0.15, 0.6),
     "gpt-4-turbo": (10.0, 30.0),
     # Gemini models
+    "gemini-3-pro-latest": (1.25, 5.0),
+    "gemini-3-pro": (1.25, 5.0),
     "gemini-2.0-flash": (0.075, 0.3),
     "gemini-1.5-pro": (1.25, 5.0),
     "gemini-1.5-flash": (0.075, 0.3),
-    # Grok models (estimated)
+    # Grok models
+    "grok-4-1-fast": (3.0, 15.0),
+    "grok-4": (5.0, 25.0),
     "grok-3": (3.0, 15.0),
     "grok-2": (2.0, 10.0),
 }
