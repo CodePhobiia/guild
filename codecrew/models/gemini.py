@@ -157,29 +157,40 @@ class GeminiClient(ModelClient):
         tool_calls = []
 
         # Handle the response
-        candidate = response.candidates[0] if response.candidates else None
+        try:
+            candidate = response.candidates[0] if response.candidates else None
+        except (KeyError, IndexError, TypeError):
+            candidate = None
 
         if candidate and hasattr(candidate, "content") and candidate.content:
-            parts = getattr(candidate.content, "parts", []) or []
-            for part in parts:
-                if hasattr(part, "text") and part.text:
-                    content_parts.append(part.text)
-                elif hasattr(part, "function_call"):
-                    fc = part.function_call
-                    # Convert protobuf Struct to dict safely
+            parts = getattr(candidate.content, "parts", None)
+            if parts:
+                for part in parts:
                     try:
-                        args = dict(fc.args) if fc.args else {}
-                    except (TypeError, KeyError):
-                        # Handle protobuf Struct conversion issues
-                        args = {}
-                        if fc.args:
-                            for key in fc.args:
-                                args[key] = fc.args[key]
-                    tool_calls.append(ToolCall(
-                        id=f"call_{fc.name}_{len(tool_calls)}",
-                        name=fc.name,
-                        arguments=args,
-                    ))
+                        if hasattr(part, "text") and part.text:
+                            content_parts.append(part.text)
+                        elif hasattr(part, "function_call"):
+                            fc = part.function_call
+                            # Convert protobuf Struct to dict safely
+                            try:
+                                args = dict(fc.args) if fc.args else {}
+                            except (TypeError, KeyError, AttributeError):
+                                # Handle protobuf Struct conversion issues
+                                args = {}
+                                if fc.args:
+                                    try:
+                                        for key in fc.args:
+                                            args[key] = fc.args[key]
+                                    except (TypeError, KeyError):
+                                        pass
+                            tool_calls.append(ToolCall(
+                                id=f"call_{fc.name}_{len(tool_calls)}",
+                                name=fc.name,
+                                arguments=args,
+                            ))
+                    except (KeyError, AttributeError, TypeError) as e:
+                        logger.debug(f"Error parsing part: {e}")
+                        continue
 
         # Determine finish reason
         finish_reason = FinishReason.STOP
@@ -331,11 +342,17 @@ class GeminiClient(ModelClient):
             collected_tool_calls = []
 
             async for chunk in response:
-                if chunk.candidates:
+                try:
+                    if not chunk.candidates:
+                        continue
                     candidate = chunk.candidates[0]
-                    if hasattr(candidate, "content") and candidate.content:
-                        parts = getattr(candidate.content, "parts", []) or []
-                        for part in parts:
+                    if not hasattr(candidate, "content") or not candidate.content:
+                        continue
+                    parts = getattr(candidate.content, "parts", None)
+                    if not parts:
+                        continue
+                    for part in parts:
+                        try:
                             if hasattr(part, "text") and part.text:
                                 yield StreamChunk(content=part.text)
                             elif hasattr(part, "function_call"):
@@ -343,16 +360,25 @@ class GeminiClient(ModelClient):
                                 # Convert protobuf Struct to dict safely
                                 try:
                                     args = dict(fc.args) if fc.args else {}
-                                except (TypeError, KeyError):
+                                except (TypeError, KeyError, AttributeError):
                                     args = {}
                                     if fc.args:
-                                        for key in fc.args:
-                                            args[key] = fc.args[key]
+                                        try:
+                                            for key in fc.args:
+                                                args[key] = fc.args[key]
+                                        except (TypeError, KeyError):
+                                            pass
                                 collected_tool_calls.append(ToolCall(
                                     id=f"call_{fc.name}_{len(collected_tool_calls)}",
                                     name=fc.name,
                                     arguments=args,
                                 ))
+                        except (KeyError, AttributeError, TypeError) as part_error:
+                            logger.debug(f"Error processing part: {part_error}")
+                            continue
+                except (KeyError, AttributeError, TypeError) as chunk_error:
+                    logger.debug(f"Error processing chunk: {chunk_error}")
+                    continue
 
             # Yield tool calls at the end
             for tc in collected_tool_calls:
