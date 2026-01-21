@@ -9,7 +9,8 @@
       "Bash(pip install:*)",
       "Bash(cd:*)",
       "Bash(wc:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(powershell -Command \"Get-Clipboard\")"
     ]
   }
 }
