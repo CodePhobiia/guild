@@ -143,21 +143,37 @@ class GeminiClient(ModelClient):
 
         return system_instruction, contents
 
-    def _build_tools_config(self, tools: Optional[list[ToolDefinition]]) -> Optional[list[dict]]:
-        """Build tools configuration for Gemini API."""
+    def _build_tools_config(self, tools: Optional[list[ToolDefinition]]) -> Optional[list]:
+        """Build tools configuration for Gemini API.
+
+        The google.genai SDK requires properly typed FunctionDeclaration objects,
+        not plain dictionaries.
+        """
         if not tools:
             return None
 
-        # Convert tools to Google format (function declarations)
-        function_declarations = []
-        for tool in tools:
-            function_declarations.append({
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool._build_json_schema(),
-            })
+        try:
+            from google.genai import types
 
-        return function_declarations
+            # Convert tools to Google format (function declarations)
+            function_declarations = []
+            for tool in tools:
+                # Build the JSON schema for parameters
+                schema = tool._build_json_schema()
+
+                # Create FunctionDeclaration with proper types
+                func_decl = types.FunctionDeclaration(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=schema,
+                )
+                function_declarations.append(func_decl)
+
+            # Wrap in a Tool object as required by the SDK
+            return [types.Tool(function_declarations=function_declarations)]
+        except ImportError:
+            logger.warning("google.genai types not available for tools")
+            return None
 
     def _parse_response(self, response: Any) -> ModelResponse:
         """Parse Gemini response to unified format."""
