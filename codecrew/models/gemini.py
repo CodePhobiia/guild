@@ -159,14 +159,22 @@ class GeminiClient(ModelClient):
         # Handle the response
         candidate = response.candidates[0] if response.candidates else None
 
-        if candidate:
-            for part in candidate.content.parts:
+        if candidate and hasattr(candidate, "content") and candidate.content:
+            parts = getattr(candidate.content, "parts", []) or []
+            for part in parts:
                 if hasattr(part, "text") and part.text:
                     content_parts.append(part.text)
                 elif hasattr(part, "function_call"):
                     fc = part.function_call
-                    # Convert protobuf Struct to dict
-                    args = dict(fc.args) if fc.args else {}
+                    # Convert protobuf Struct to dict safely
+                    try:
+                        args = dict(fc.args) if fc.args else {}
+                    except (TypeError, KeyError):
+                        # Handle protobuf Struct conversion issues
+                        args = {}
+                        if fc.args:
+                            for key in fc.args:
+                                args[key] = fc.args[key]
                     tool_calls.append(ToolCall(
                         id=f"call_{fc.name}_{len(tool_calls)}",
                         name=fc.name,
@@ -325,17 +333,26 @@ class GeminiClient(ModelClient):
             async for chunk in response:
                 if chunk.candidates:
                     candidate = chunk.candidates[0]
-                    for part in candidate.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            yield StreamChunk(content=part.text)
-                        elif hasattr(part, "function_call"):
-                            fc = part.function_call
-                            args = dict(fc.args) if fc.args else {}
-                            collected_tool_calls.append(ToolCall(
-                                id=f"call_{fc.name}_{len(collected_tool_calls)}",
-                                name=fc.name,
-                                arguments=args,
-                            ))
+                    if hasattr(candidate, "content") and candidate.content:
+                        parts = getattr(candidate.content, "parts", []) or []
+                        for part in parts:
+                            if hasattr(part, "text") and part.text:
+                                yield StreamChunk(content=part.text)
+                            elif hasattr(part, "function_call"):
+                                fc = part.function_call
+                                # Convert protobuf Struct to dict safely
+                                try:
+                                    args = dict(fc.args) if fc.args else {}
+                                except (TypeError, KeyError):
+                                    args = {}
+                                    if fc.args:
+                                        for key in fc.args:
+                                            args[key] = fc.args[key]
+                                collected_tool_calls.append(ToolCall(
+                                    id=f"call_{fc.name}_{len(collected_tool_calls)}",
+                                    name=fc.name,
+                                    arguments=args,
+                                ))
 
             # Yield tool calls at the end
             for tc in collected_tool_calls:
