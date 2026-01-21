@@ -370,11 +370,13 @@ class GeminiClient(ModelClient):
             total_usage = None
 
             # Use the streaming method
-            async for chunk in async_client.models.generate_content_stream(
+            # Note: generate_content_stream returns a coroutine that yields an async generator
+            stream = await async_client.models.generate_content_stream(
                 model=self.model_id,
                 contents=contents,
                 config=config,
-            ):
+            )
+            async for chunk in stream:
                 try:
                     # Try to get text from chunk
                     if hasattr(chunk, "text") and chunk.text:
