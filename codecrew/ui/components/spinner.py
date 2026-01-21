@@ -81,6 +81,24 @@ class Spinner:
         frame_index = int(elapsed / self.speed) % len(self.frames)
         return self.frames[frame_index]
 
+    @property
+    def elapsed_seconds(self) -> float:
+        """Get elapsed time in seconds since spinner started."""
+        return time.time() - self._start_time
+
+    def format_elapsed(self) -> str:
+        """Format elapsed time as a human-readable string.
+
+        Returns:
+            Formatted time string like '5s', '1m 23s', '2m 5s'
+        """
+        elapsed = self.elapsed_seconds
+        if elapsed < 60:
+            return f"{int(elapsed)}s"
+        minutes = int(elapsed // 60)
+        seconds = int(elapsed % 60)
+        return f"{minutes}m {seconds}s"
+
     def set_message(self, message: str) -> None:
         """Set the message to display alongside the spinner."""
         self._message = message
@@ -179,7 +197,10 @@ class ThinkingIndicator:
         else:
             text.append(", ".join(get_model_display_name(m) for m in self.models))
 
-        text.append("...")
+        text.append("... ")
+
+        # Elapsed time
+        text.append(f"[{self.spinner.format_elapsed()}]", style="dim")
 
         return text
 
@@ -227,7 +248,10 @@ class TypingIndicator:
         else:
             text.append(get_model_display_name(self.model))
 
-        text.append(" is typing...")
+        text.append(" is typing... ")
+
+        # Elapsed time
+        text.append(f"[{self.spinner.format_elapsed()}]", style="dim")
 
         return text
 
@@ -283,7 +307,10 @@ class ToolExecutingIndicator:
 
         text.append(" executing ")
         text.append(self.tool_name, style="bold yellow")
-        text.append("...")
+        text.append("... ")
+
+        # Elapsed time
+        text.append(f"[{self.spinner.format_elapsed()}]", style="dim")
 
         return text
 
