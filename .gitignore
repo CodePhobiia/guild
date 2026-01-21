@@ -90,12 +90,27 @@ dmypy.json
 
 # Config with secrets
 config.yaml
+codecrew.yaml
 !codecrew/config/defaults.yaml
 API_KEYS.txt
+*.key
+*.pem
+*credentials*
+*secret*
+
+# Environment files (except example)
+.env
+.env.*
+!.env.example
 
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Project specific
 ~/.codecrew/
+
+# Temporary files
+*.tmp
+*.temp
