@@ -1,0 +1,275 @@
+"""Tool definitions with provider-specific translations."""
+
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+
+@dataclass
+class ToolParameter:
+    """A parameter for a tool."""
+
+    name: str
+    type: str  # 'string', 'integer', 'number', 'boolean', 'array', 'object'
+    description: str
+    required: bool = True
+    enum: Optional[list[str]] = None
+    items: Optional[dict[str, Any]] = None  # For array types
+    properties: Optional[dict[str, Any]] = None  # For object types
+
+    def to_json_schema(self) -> dict[str, Any]:
+        """Convert to JSON Schema format."""
+        schema: dict[str, Any] = {
+            "type": self.type,
+            "description": self.description,
+        }
+        if self.enum:
+            schema["enum"] = self.enum
+        if self.items:
+            schema["items"] = self.items
+        if self.properties:
+            schema["properties"] = self.properties
+        return schema
+
+
+@dataclass
+class ToolDefinition:
+    """Definition of a tool that can be called by models."""
+
+    name: str
+    description: str
+    parameters: list[ToolParameter] = field(default_factory=list)
+
+    def _build_json_schema(self) -> dict[str, Any]:
+        """Build JSON schema for parameters."""
+        properties = {}
+        required = []
+
+        for param in self.parameters:
+            properties[param.name] = param.to_json_schema()
+            if param.required:
+                required.append(param.name)
+
+        schema: dict[str, Any] = {
+            "type": "object",
+            "properties": properties,
+        }
+        if required:
+            schema["required"] = required
+
+        return schema
+
+    def to_anthropic(self) -> dict[str, Any]:
+        """Convert to Anthropic tool format.
+
+        Anthropic format:
+        {
+            "name": "tool_name",
+            "description": "tool description",
+            "input_schema": {
+                "type": "object",
+                "properties": {...},
+                "required": [...]
+            }
+        }
+        """
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self._build_json_schema(),
+        }
+
+    def to_openai(self) -> dict[str, Any]:
+        """Convert to OpenAI function/tool format.
+
+        OpenAI format:
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_name",
+                "description": "tool description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {...},
+                    "required": [...]
+                }
+            }
+        }
+        """
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self._build_json_schema(),
+            },
+        }
+
+    def to_google(self) -> dict[str, Any]:
+        """Convert to Google Gemini function declaration format.
+
+        Google format:
+        {
+            "name": "tool_name",
+            "description": "tool description",
+            "parameters": {
+                "type": "object",
+                "properties": {...},
+                "required": [...]
+            }
+        }
+        """
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self._build_json_schema(),
+        }
+
+    def to_xai(self) -> dict[str, Any]:
+        """Convert to xAI/Grok format (OpenAI-compatible)."""
+        return self.to_openai()
+
+
+def tools_to_anthropic(tools: list[ToolDefinition]) -> list[dict[str, Any]]:
+    """Convert a list of tools to Anthropic format."""
+    return [tool.to_anthropic() for tool in tools]
+
+
+def tools_to_openai(tools: list[ToolDefinition]) -> list[dict[str, Any]]:
+    """Convert a list of tools to OpenAI format."""
+    return [tool.to_openai() for tool in tools]
+
+
+def tools_to_google(tools: list[ToolDefinition]) -> list[dict[str, Any]]:
+    """Convert a list of tools to Google format."""
+    return [tool.to_google() for tool in tools]
+
+
+def tools_to_xai(tools: list[ToolDefinition]) -> list[dict[str, Any]]:
+    """Convert a list of tools to xAI format."""
+    return [tool.to_xai() for tool in tools]
+
+
+# Pre-defined tools for CodeCrew
+READ_FILE_TOOL = ToolDefinition(
+    name="read_file",
+    description="Read the contents of a file at the specified path",
+    parameters=[
+        ToolParameter(
+            name="path",
+            type="string",
+            description="The path to the file to read",
+        ),
+    ],
+)
+
+WRITE_FILE_TOOL = ToolDefinition(
+    name="write_file",
+    description="Write content to a file at the specified path",
+    parameters=[
+        ToolParameter(
+            name="path",
+            type="string",
+            description="The path to the file to write",
+        ),
+        ToolParameter(
+            name="content",
+            type="string",
+            description="The content to write to the file",
+        ),
+    ],
+)
+
+EDIT_FILE_TOOL = ToolDefinition(
+    name="edit_file",
+    description="Make targeted edits to a file",
+    parameters=[
+        ToolParameter(
+            name="path",
+            type="string",
+            description="The path to the file to edit",
+        ),
+        ToolParameter(
+            name="edits",
+            type="array",
+            description="List of edits to make",
+            items={
+                "type": "object",
+                "properties": {
+                    "old_text": {"type": "string", "description": "Text to find"},
+                    "new_text": {"type": "string", "description": "Text to replace with"},
+                },
+                "required": ["old_text", "new_text"],
+            },
+        ),
+    ],
+)
+
+EXECUTE_COMMAND_TOOL = ToolDefinition(
+    name="execute_command",
+    description="Execute a shell command",
+    parameters=[
+        ToolParameter(
+            name="command",
+            type="string",
+            description="The command to execute",
+        ),
+        ToolParameter(
+            name="cwd",
+            type="string",
+            description="Working directory for the command",
+            required=False,
+        ),
+    ],
+)
+
+SEARCH_FILES_TOOL = ToolDefinition(
+    name="search_files",
+    description="Search for a pattern in files",
+    parameters=[
+        ToolParameter(
+            name="pattern",
+            type="string",
+            description="The pattern to search for (regex supported)",
+        ),
+        ToolParameter(
+            name="path",
+            type="string",
+            description="Directory to search in",
+            required=False,
+        ),
+        ToolParameter(
+            name="file_pattern",
+            type="string",
+            description="Glob pattern to filter files (e.g., '*.py')",
+            required=False,
+        ),
+    ],
+)
+
+LIST_DIRECTORY_TOOL = ToolDefinition(
+    name="list_directory",
+    description="List files and directories at a path",
+    parameters=[
+        ToolParameter(
+            name="path",
+            type="string",
+            description="The directory path to list",
+        ),
+        ToolParameter(
+            name="recursive",
+            type="boolean",
+            description="Whether to list recursively",
+            required=False,
+        ),
+    ],
+)
+
+# All default tools
+DEFAULT_TOOLS = [
+    READ_FILE_TOOL,
+    WRITE_FILE_TOOL,
+    EDIT_FILE_TOOL,
+    EXECUTE_COMMAND_TOOL,
+    SEARCH_FILES_TOOL,
+    LIST_DIRECTORY_TOOL,
+]

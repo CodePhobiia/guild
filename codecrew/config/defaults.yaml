@@ -1,0 +1,83 @@
+# CodeCrew Default Configuration
+# Copy this file to ~/.codecrew/config.yaml and customize
+
+# API Keys
+# You can set these here or use environment variables:
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, XAI_API_KEY
+api_keys:
+  anthropic: ${ANTHROPIC_API_KEY}
+  openai: ${OPENAI_API_KEY}
+  google: ${GOOGLE_API_KEY}
+  xai: ${XAI_API_KEY}
+
+# Model Settings
+# Configure each AI model's behavior
+models:
+  claude:
+    enabled: true
+    model_id: "claude-sonnet-4-20250514"
+    max_tokens: 8192
+    temperature: 0.7
+  gpt:
+    enabled: true
+    model_id: "gpt-4o"
+    max_tokens: 8192
+    temperature: 0.7
+  gemini:
+    enabled: true
+    model_id: "gemini-2.0-flash"
+    max_tokens: 8192
+    temperature: 0.7
+  grok:
+    enabled: true
+    model_id: "grok-3"
+    max_tokens: 8192
+    temperature: 0.7
+
+# Conversation Settings
+# Control how the group chat behaves
+conversation:
+  # Who speaks first: "rotate" cycles through models, or pick a specific one
+  first_responder: "rotate"
+  # Confidence threshold for models deciding to speak (0.0-1.0)
+  silence_threshold: 0.3
+  # Maximum context tokens to maintain
+  max_context_tokens: 100000
+  # Auto-save conversations
+  auto_save: true
+  # Auto-save interval in minutes
+  save_interval_minutes: 5
+
+# UI Settings
+# Customize the terminal interface
+ui:
+  # Theme: "default", "minimal", "colorblind"
+  theme: "default"
+  # Show "X is silent" messages
+  show_silent_models: true
+  # Show token usage per message
+  show_token_usage: false
+  # Show estimated cost
+  show_cost_estimate: true
+  # Syntax highlighting theme for code blocks
+  code_theme: "monokai"
+
+# Tool Permissions
+# Control what actions the AI can take
+tools:
+  # Allow writing files
+  file_write: true
+  # File deletion: true, false, or "confirm" (ask before each)
+  file_delete: "confirm"
+  # Shell command execution: true, false, or "confirm"
+  shell_execute: "confirm"
+  # Allow git operations
+  git_operations: true
+
+# Storage Settings
+# Where to store data
+storage:
+  # Path to SQLite database (~ expands to home directory)
+  database_path: "~/.codecrew/sessions.db"
+  # Maximum number of sessions to keep
+  max_sessions: 100
