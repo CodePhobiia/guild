@@ -56,6 +56,9 @@ codecrew = "codecrew.cli:app"
 [project.urls]
 Homepage = "https://github.com/CodePhobiia/guild"
 Repository = "https://github.com/CodePhobiia/guild"
+Documentation = "https://github.com/CodePhobiia/guild#readme"
+"Bug Tracker" = "https://github.com/CodePhobiia/guild/issues"
+Changelog = "https://github.com/CodePhobiia/guild/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -82,3 +85,23 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["codecrew"]
+branch = true
+omit = [
+    "codecrew/__main__.py",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+fail_under = 70
+show_missing = true
