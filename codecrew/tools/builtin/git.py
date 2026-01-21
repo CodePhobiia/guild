@@ -2,6 +2,11 @@
 
 This module provides tools for Git repository operations with
 appropriate permission levels for safe AI-driven interactions.
+
+Security measures:
+- Working directory validation to prevent operations outside project
+- Input validation for branch names and file paths
+- Dangerous operations (delete, force) require elevated permissions
 """
 
 from __future__ import annotations
@@ -10,7 +15,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from codecrew.git import GitRepository, GitError
+from codecrew.errors import NotARepositoryError, GitError, PathAccessError, InputValidationError
+from codecrew.git import GitRepository
 from codecrew.models.tools import (
     GIT_STATUS_TOOL,
     GIT_DIFF_TOOL,
@@ -29,23 +35,49 @@ from codecrew.tools.registry import Tool
 logger = logging.getLogger(__name__)
 
 
-def _get_repo(path: str | None, working_directory: str | None) -> GitRepository:
+def _get_repo(
+    path: str | None,
+    working_directory: str | None,
+    allowed_paths: list[str] | None = None,
+) -> GitRepository:
     """Get a GitRepository for the given path.
 
     Args:
         path: Explicit path from tool arguments.
         working_directory: Default working directory.
+        allowed_paths: If set, repository must be within one of these paths.
 
     Returns:
         GitRepository instance.
 
     Raises:
-        GitError: If not in a git repository.
+        NotARepositoryError: If not in a git repository.
+        PathAccessError: If repository is outside allowed paths.
     """
     search_path = Path(path) if path else Path(working_directory or ".")
+    search_path = search_path.resolve()
+
+    # Validate path is within allowed directories
+    if allowed_paths:
+        is_allowed = False
+        for allowed in allowed_paths:
+            allowed_resolved = Path(allowed).resolve()
+            try:
+                search_path.relative_to(allowed_resolved)
+                is_allowed = True
+                break
+            except ValueError:
+                continue
+
+        if not is_allowed:
+            raise PathAccessError(
+                str(search_path),
+                f"path is outside allowed directories: {allowed_paths}",
+            )
+
     repo = GitRepository.find(search_path)
     if not repo:
-        raise GitError(f"Not a git repository: {search_path}")
+        raise NotARepositoryError(str(search_path))
     return repo
 
 

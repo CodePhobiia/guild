@@ -2,20 +2,24 @@
 
 These tools provide safe file system access with path validation
 and appropriate permission levels.
+
+Security measures:
+- Path containment validation using Path.relative_to()
+- Symlink resolution to prevent traversal attacks
+- Explicit blocklist for sensitive system paths
+- File size limits to prevent memory exhaustion
 """
 
 from __future__ import annotations
 
 import fnmatch
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any
 
+from codecrew.errors import PathAccessError, InputValidationError
 from codecrew.models.tools import (
-    ToolDefinition,
-    ToolParameter,
     READ_FILE_TOOL,
     WRITE_FILE_TOOL,
     EDIT_FILE_TOOL,
@@ -27,14 +31,27 @@ from codecrew.tools.registry import Tool
 
 logger = logging.getLogger(__name__)
 
-
-class PathAccessError(Exception):
-    """Raised when path access is denied."""
-
-    def __init__(self, path: str, reason: str) -> None:
-        self.path = path
-        self.reason = reason
-        super().__init__(f"Path access denied for '{path}': {reason}")
+# Sensitive paths that should never be accessed
+BLOCKED_PATHS = {
+    # Unix/Linux sensitive paths
+    "/etc/shadow",
+    "/etc/passwd",
+    "/etc/sudoers",
+    "/root/.ssh",
+    "/root/.bashrc",
+    "/root/.bash_history",
+    # Windows sensitive paths
+    "C:\\Windows\\System32\\config\\SAM",
+    "C:\\Windows\\System32\\config\\SYSTEM",
+    "C:\\Windows\\System32\\config\\SECURITY",
+    # Common secret locations
+    ".env",
+    ".env.local",
+    ".env.production",
+    "credentials.json",
+    "secrets.yaml",
+    "secrets.yml",
+}
 
 
 def _resolve_path(
@@ -57,31 +74,66 @@ def _resolve_path(
     return p.resolve()
 
 
+def _is_path_blocked(path: Path) -> bool:
+    """Check if a path is in the blocked list.
+
+    Args:
+        path: The resolved path to check.
+
+    Returns:
+        True if the path should be blocked.
+    """
+    # Use forward slashes for consistent matching across platforms
+    path_str = str(path).replace("\\", "/")
+    path_name = path.name
+
+    # Check exact matches and name-based matches
+    for blocked in BLOCKED_PATHS:
+        blocked_normalized = blocked.replace("\\", "/")
+        if blocked_normalized in path_str or path_name == blocked:
+            return True
+
+    return False
+
+
 def _check_path_allowed(
     path: Path,
     allowed_paths: list[str] | None,
 ) -> None:
     """Check if a path is within allowed paths.
 
+    Uses Path.relative_to() for proper path containment checking,
+    which is resistant to path traversal attacks.
+
     Args:
         path: The resolved path to check.
         allowed_paths: List of allowed base paths.
 
     Raises:
-        PathAccessError: If path is not within allowed paths.
+        PathAccessError: If path is not within allowed paths or is blocked.
     """
+    # First check blocklist
+    if _is_path_blocked(path):
+        logger.warning(f"Blocked path access attempt: {path}")
+        raise PathAccessError(str(path), "access to this path is blocked for security")
+
     if allowed_paths is None:
         return  # No restrictions
 
-    path_str = str(path)
+    # Use Path.relative_to() for secure containment check
+    # This properly handles symlinks, "..", and other traversal attempts
     for allowed in allowed_paths:
-        allowed_resolved = str(Path(allowed).resolve())
-        if path_str.startswith(allowed_resolved):
-            return
+        allowed_resolved = Path(allowed).resolve()
+        try:
+            # relative_to() raises ValueError if path is not within allowed_resolved
+            path.relative_to(allowed_resolved)
+            return  # Path is within this allowed directory
+        except ValueError:
+            continue  # Try next allowed path
 
     raise PathAccessError(
         str(path),
-        f"Path is not within allowed directories: {allowed_paths}",
+        f"path is outside allowed directories: {allowed_paths}",
     )
 
 

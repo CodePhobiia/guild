@@ -357,5 +357,7 @@ class GeminiClient(ModelClient):
             model = self._get_model()
             result = model.count_tokens(text)
             return result.total_tokens
-        except Exception:
+        except Exception as e:
+            # Fall back to estimate for any error (API errors, import issues, etc.)
+            logger.debug(f"Gemini token counting failed, using estimate: {type(e).__name__}: {e}")
             return self.estimate_tokens(text)

@@ -323,12 +323,9 @@ class ClaudeClient(ModelClient):
         Falls back to rough estimate if tokenizer unavailable.
         """
         try:
-            import anthropic
-
-            # Use the client's token counting
-            client = self._get_client()
-            # Note: Anthropic SDK doesn't expose direct token counting
             # Use rough estimate (Claude uses ~4 chars per token on average)
+            # Note: Anthropic SDK doesn't expose direct token counting
             return len(text) // 4
-        except Exception:
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Token counting unavailable, using estimate: {e}")
             return self.estimate_tokens(text)

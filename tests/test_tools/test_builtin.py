@@ -10,8 +10,8 @@ from codecrew.tools.builtin import (
     get_builtin_tools,
     register_builtin_tools,
 )
+from codecrew.errors import PathAccessError, CommandBlockedError
 from codecrew.tools.builtin.files import (
-    PathAccessError,
     create_edit_file_tool,
     create_list_directory_tool,
     create_read_file_tool,
@@ -397,7 +397,7 @@ class TestExecuteCommandTool:
         """Test that blocked commands are rejected."""
         tool = create_execute_command_tool(working_directory=str(tmp_path))
 
-        with pytest.raises(PermissionError, match="blocked"):
+        with pytest.raises(CommandBlockedError):
             tool.handler({"command": "rm -rf /"})
 
 

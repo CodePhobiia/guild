@@ -1,5 +1,6 @@
 """Tool execution visualization components."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -13,6 +14,8 @@ from rich.tree import Tree
 
 from codecrew.models.types import ToolCall, ToolResult
 from codecrew.ui.theme import Theme, get_model_display_name, get_symbol
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -104,8 +107,8 @@ class ToolCallDisplay:
             if content.strip().startswith(("{", "[")):
                 try:
                     return Syntax(content, "json", theme="monokai", line_numbers=False)
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"JSON syntax highlighting failed: {e}")
 
             # Truncate long content
             if len(content) > 200 and self.is_collapsed:

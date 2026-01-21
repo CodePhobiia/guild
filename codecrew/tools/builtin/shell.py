@@ -2,20 +2,28 @@
 
 This tool provides safe shell command execution with timeout protection,
 output capture, and appropriate permission levels.
+
+Security measures:
+- Blocked command list prevents dangerous operations
+- Path validation ensures commands run in allowed directories
+- Output truncation prevents memory exhaustion
+- Timeout protection prevents runaway processes
+- Dangerous command detection requires explicit approval
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from codecrew.models.tools import EXECUTE_COMMAND_TOOL, ToolDefinition, ToolParameter
+from codecrew.errors import CommandBlockedError, PathAccessError, InputValidationError
+from codecrew.models.tools import EXECUTE_COMMAND_TOOL
 from codecrew.tools.permissions import PermissionLevel
 from codecrew.tools.registry import Tool
 
@@ -83,6 +91,8 @@ BLOCKED_COMMANDS = {
     # Extremely dangerous
     "rm -rf /",
     "rm -rf /*",
+    "rm -rf ~",
+    "rm -rf ~/*",
     ":(){ :|:& };:",  # Fork bomb
     "> /dev/sda",
     "mkfs.ext4 /dev/sda",
@@ -90,6 +100,25 @@ BLOCKED_COMMANDS = {
     "cat /etc/shadow",
     "cat /etc/passwd",
 }
+
+# Patterns that indicate potentially malicious commands
+BLOCKED_PATTERNS = [
+    r"rm\s+(-[rf]+\s+)*(/|/\*|\~|\~/)$",  # rm -rf / variants
+    r">\s*/dev/[hs]d[a-z]",  # Overwrite disk devices
+    r"mkfs\.",  # Format filesystem
+    r"dd\s+.*of=/dev/[hs]d[a-z]",  # dd to disk device
+    r"\|\s*sh\s*$",  # Piping to shell (potential injection)
+    r"\|\s*bash\s*$",  # Piping to bash
+    r"`.*`",  # Command substitution (potential injection)
+    r"\$\(.*\)",  # Command substitution variant
+    r";\s*rm\s+",  # Command chaining with rm
+    r"&&\s*rm\s+",  # Command chaining with rm
+    r"eval\s+",  # Eval (code execution)
+    r"exec\s+",  # Exec (replace process)
+]
+
+# Compile patterns for efficiency
+_BLOCKED_PATTERN_RE = [re.compile(p, re.IGNORECASE) for p in BLOCKED_PATTERNS]
 
 
 def _get_command_base(command: str) -> str:
@@ -114,20 +143,28 @@ def _get_command_base(command: str) -> str:
     return base
 
 
-def _is_command_blocked(command: str) -> bool:
+def _is_command_blocked(command: str) -> tuple[bool, str]:
     """Check if a command is in the blocked list.
 
     Args:
         command: Command to check.
 
     Returns:
-        True if command is blocked.
+        Tuple of (is_blocked, reason).
     """
     normalized = command.strip().lower()
+
+    # Check explicit blocklist
     for blocked in BLOCKED_COMMANDS:
         if blocked in normalized:
-            return True
-    return False
+            return True, f"matches blocked command: {blocked}"
+
+    # Check dangerous patterns
+    for pattern in _BLOCKED_PATTERN_RE:
+        if pattern.search(command):
+            return True, "matches dangerous pattern"
+
+    return False, ""
 
 
 def _is_command_dangerous(command: str) -> bool:
@@ -166,11 +203,87 @@ def _is_command_dangerous(command: str) -> bool:
     return False
 
 
+def _validate_working_directory(
+    cwd: str | None,
+    base_directory: str | None,
+    allowed_paths: list[str] | None = None,
+) -> Path:
+    """Validate and resolve working directory.
+
+    Args:
+        cwd: Requested working directory (may be relative).
+        base_directory: Base directory for relative paths.
+        allowed_paths: If set, working directory must be within one of these.
+
+    Returns:
+        Resolved and validated Path.
+
+    Raises:
+        PathAccessError: If directory is outside allowed paths.
+        FileNotFoundError: If directory doesn't exist.
+        ValueError: If path is not a directory.
+    """
+    if cwd:
+        work_dir = Path(cwd)
+        if not work_dir.is_absolute():
+            base = Path(base_directory) if base_directory else Path.cwd()
+            work_dir = base / work_dir
+    else:
+        work_dir = Path(base_directory) if base_directory else Path.cwd()
+
+    # Resolve to absolute path (follows symlinks)
+    work_dir = work_dir.resolve()
+
+    # Validate existence
+    if not work_dir.exists():
+        raise FileNotFoundError(f"Working directory not found: {work_dir}")
+
+    if not work_dir.is_dir():
+        raise ValueError(f"Path is not a directory: {work_dir}")
+
+    # Validate against allowed paths if specified
+    if allowed_paths:
+        is_allowed = False
+        for allowed in allowed_paths:
+            allowed_resolved = Path(allowed).resolve()
+            try:
+                work_dir.relative_to(allowed_resolved)
+                is_allowed = True
+                break
+            except ValueError:
+                continue
+
+        if not is_allowed:
+            raise PathAccessError(
+                str(work_dir),
+                "working directory is outside allowed paths"
+            )
+
+    return work_dir
+
+
+def _sanitize_command_for_log(command: str, max_length: int = 100) -> str:
+    """Sanitize command for logging (truncate, redact sensitive parts).
+
+    Args:
+        command: Command to sanitize.
+        max_length: Maximum length to include.
+
+    Returns:
+        Sanitized command string.
+    """
+    # Truncate
+    if len(command) > max_length:
+        return command[:max_length] + "..."
+    return command
+
+
 def create_execute_command_tool(
     working_directory: str | None = None,
     timeout: float = 60.0,
     max_output_length: int = 50000,
     shell: bool = True,
+    allowed_paths: list[str] | None = None,
 ) -> Tool:
     """Create a tool for executing shell commands.
 
@@ -179,46 +292,46 @@ def create_execute_command_tool(
         timeout: Maximum execution time in seconds.
         max_output_length: Maximum characters to capture from output.
         shell: If True, execute through shell (enables pipes, etc.).
+        allowed_paths: If set, commands can only run in these directories.
 
     Returns:
         Configured Tool instance.
+
+    Security:
+        - Commands are checked against blocklist and dangerous patterns
+        - Working directory is validated against allowed paths
+        - Output is truncated to prevent memory exhaustion
+        - Timeout prevents runaway processes
     """
 
     def handler(args: dict[str, Any]) -> str:
-        command = args["command"]
+        command = args.get("command", "")
         cwd = args.get("cwd")
 
-        # Resolve working directory
-        if cwd:
-            work_dir = Path(cwd)
-            if not work_dir.is_absolute():
-                base = (
-                    Path(working_directory) if working_directory else Path.cwd()
-                )
-                work_dir = base / work_dir
-        else:
-            work_dir = (
-                Path(working_directory) if working_directory else Path.cwd()
-            )
+        # Validate command is provided
+        if not command or not command.strip():
+            raise InputValidationError("command", "command cannot be empty")
 
-        work_dir = work_dir.resolve()
+        command = command.strip()
 
-        if not work_dir.exists():
-            raise FileNotFoundError(f"Working directory not found: {work_dir}")
+        # Security check - blocked commands
+        is_blocked, reason = _is_command_blocked(command)
+        if is_blocked:
+            logger.warning(f"Blocked command attempt: {_sanitize_command_for_log(command)}")
+            raise CommandBlockedError(command, reason)
 
-        if not work_dir.is_dir():
-            raise ValueError(f"Path is not a directory: {work_dir}")
+        # Validate and resolve working directory
+        work_dir = _validate_working_directory(cwd, working_directory, allowed_paths)
 
-        # Security check
-        if _is_command_blocked(command):
-            raise PermissionError(f"Command is blocked for security: {command}")
-
-        logger.info(f"Executing command: {command} (in {work_dir})")
+        # Log command execution (sanitized)
+        logger.debug(f"Executing command in {work_dir}: {_sanitize_command_for_log(command)}")
 
         try:
             # Execute the command
             if shell:
                 # Use shell=True for shell features (pipes, etc.)
+                # Note: This is intentional to support shell features like pipes
+                # Security is enforced via command blocklist and patterns
                 result = subprocess.run(
                     command,
                     shell=True,
@@ -229,11 +342,14 @@ def create_execute_command_tool(
                     env={**os.environ, "PYTHONUNBUFFERED": "1"},
                 )
             else:
-                # Parse command for non-shell execution
-                if sys.platform == "win32":
-                    cmd_parts = command.split()
-                else:
-                    cmd_parts = shlex.split(command)
+                # Parse command for non-shell execution (safer but limited)
+                try:
+                    if sys.platform == "win32":
+                        cmd_parts = command.split()
+                    else:
+                        cmd_parts = shlex.split(command)
+                except ValueError as e:
+                    raise InputValidationError("command", f"invalid command syntax: {e}")
 
                 result = subprocess.run(
                     cmd_parts,
@@ -244,7 +360,7 @@ def create_execute_command_tool(
                     env={**os.environ, "PYTHONUNBUFFERED": "1"},
                 )
 
-            # Build output
+            # Build output with truncation
             output_parts = []
 
             if result.stdout:
@@ -270,18 +386,20 @@ def create_execute_command_tool(
             output = "\n\n".join(output_parts)
 
             if result.returncode != 0:
-                logger.warning(
-                    f"Command exited with code {result.returncode}: {command}"
-                )
+                logger.debug(f"Command exited with code {result.returncode}")
             else:
-                logger.debug(f"Command completed successfully: {command}")
+                logger.debug("Command completed successfully")
 
             return output
 
         except subprocess.TimeoutExpired:
+            logger.warning(f"Command timed out after {timeout}s")
             raise TimeoutError(
-                f"Command timed out after {timeout} seconds: {command}"
+                f"Command timed out after {timeout} seconds"
             )
+        except OSError as e:
+            logger.error(f"OS error executing command: {e}")
+            raise
 
     # Determine permission level based on command analysis
     # The actual permission level will be checked at runtime based on the specific command
@@ -308,7 +426,8 @@ def get_command_permission_level(command: str) -> PermissionLevel:
     Returns:
         Appropriate PermissionLevel for the command.
     """
-    if _is_command_blocked(command):
+    is_blocked, _ = _is_command_blocked(command)
+    if is_blocked:
         return PermissionLevel.BLOCKED
 
     if _is_command_dangerous(command):

@@ -1,5 +1,6 @@
 """Keyboard binding system for the TUI."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
@@ -7,6 +8,8 @@ from typing import Any, Callable, Optional
 import aiosqlite
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -123,9 +126,9 @@ class KeyBindingManager:
                             description=self._bindings[key].description,
                             category=self._bindings[key].category,
                         )
-        except Exception:
-            # Table might not exist yet, that's okay
-            pass
+        except (OSError, aiosqlite.Error) as e:
+            # Table might not exist yet or database unavailable, that's okay
+            logger.debug(f"Could not load custom key bindings: {e}")
 
     async def save_binding(self, key: str, action: str) -> None:
         """Save a custom binding to the database.
@@ -307,9 +310,9 @@ class KeyBindingManager:
 
             try:
                 kb.add(pt_key)(create_handler(action))
-            except Exception:
-                # Some keys might not be valid, skip them
-                pass
+            except (ValueError, KeyError) as e:
+                # Some keys might not be valid in prompt_toolkit, skip them
+                logger.debug(f"Could not bind key {key}: {e}")
 
         return kb
 

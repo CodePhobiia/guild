@@ -1,6 +1,7 @@
 """Main TUI application for CodeCrew."""
 
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -23,6 +24,8 @@ from codecrew.ui.dialogs.session_picker import ConfirmationDialog, SessionPicker
 from codecrew.ui.handlers.commands import CommandHandler, CommandResult
 from codecrew.ui.handlers.events import EventHandler
 from codecrew.ui.theme import Theme, ThemeName, get_theme
+
+logger = logging.getLogger(__name__)
 
 
 class ChatApp:
@@ -476,7 +479,8 @@ class ChatApp:
                 )
                 return True
             return False
-        except Exception:
+        except (OSError, ValueError, KeyError) as e:
+            logger.debug(f"Failed to load session: {e}")
             return False
 
     async def save_session(self, name: Optional[str] = None) -> None:
@@ -549,8 +553,8 @@ class ChatApp:
             try:
                 db_stats = await self.conversation_manager.get_conversation_stats()
                 stats.update(db_stats)
-            except Exception:
-                pass
+            except (OSError, ValueError) as e:
+                logger.debug(f"Failed to get conversation stats: {e}")
 
         return stats
 
