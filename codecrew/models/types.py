@@ -70,12 +70,32 @@ class Message:
 
     @classmethod
     def tool(cls, tool_call_id: str, content: str, name: str, is_error: bool = False) -> "Message":
-        """Create a tool result message."""
+        """Create a tool result message for a single tool call."""
         return cls(
             role=MessageRole.TOOL,
             content=content,
             name=name,
             tool_results=[ToolResult(tool_call_id=tool_call_id, content=content, is_error=is_error)],
+        )
+
+    @classmethod
+    def tool_results(cls, results: list["ToolResult"]) -> "Message":
+        """Create a tool result message for multiple tool results.
+
+        Args:
+            results: List of ToolResult objects.
+
+        Returns:
+            Message with role=TOOL containing all tool results.
+        """
+        # Combine contents for the main content field
+        content = "\n\n".join(
+            f"[{r.tool_call_id}]: {r.content}" for r in results
+        )
+        return cls(
+            role=MessageRole.TOOL,
+            content=content,
+            tool_results=results,
         )
 
     @property

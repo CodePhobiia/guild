@@ -33,7 +33,17 @@ codecrew/
 │   ├── context.py           # ContextAssembler, ContextSummarizer (token limits, pinning)
 │   ├── mentions.py          # @mention parsing (@claude, @gpt, @all, etc.)
 │   ├── prompts.py           # Prompt templates for evaluation
-│   └── persistent.py        # PersistentOrchestrator with auto-persistence
+│   ├── persistent.py        # PersistentOrchestrator with auto-persistence
+│   └── tool_orchestrator.py # ToolEnabledOrchestrator with tool execution loop
+├── tools/
+│   ├── __init__.py          # Package exports (ToolRegistry, ToolExecutor, etc.)
+│   ├── registry.py          # ToolRegistry and Tool classes
+│   ├── executor.py          # ToolExecutor with safety guards and timeout
+│   ├── permissions.py       # PermissionManager, PermissionLevel enum
+│   └── builtin/
+│       ├── __init__.py      # Built-in tool registration
+│       ├── files.py         # File operation tools (read, write, edit, list, search)
+│       └── shell.py         # Shell command execution with safety checks
 ├── conversation/
 │   ├── __init__.py          # Package exports
 │   ├── persistence.py       # DatabaseManager (SQLite via aiosqlite)
@@ -55,13 +65,20 @@ tests/
 │   ├── test_types.py        # Message, Usage, etc. tests
 │   ├── test_tools.py        # Tool definition tests
 │   └── test_clients.py      # Model client tests
-└── test_orchestrator/
-    ├── test_mentions.py     # @mention parsing tests
-    ├── test_turns.py        # Turn management tests
-    ├── test_speaking.py     # Speaking evaluation tests
-    ├── test_context.py      # Context assembly tests
-    ├── test_engine.py       # Integration tests
-    └── test_persistent.py   # PersistentOrchestrator tests
+├── test_orchestrator/
+│   ├── test_mentions.py     # @mention parsing tests
+│   ├── test_turns.py        # Turn management tests
+│   ├── test_speaking.py     # Speaking evaluation tests
+│   ├── test_context.py      # Context assembly tests
+│   ├── test_engine.py       # Integration tests
+│   └── test_persistent.py   # PersistentOrchestrator tests
+└── test_tools/
+    ├── __init__.py          # Test package
+    ├── test_registry.py     # ToolRegistry tests
+    ├── test_permissions.py  # PermissionManager tests
+    ├── test_executor.py     # ToolExecutor tests
+    ├── test_builtin.py      # Built-in tools tests
+    └── test_tool_orchestrator.py # ToolEnabledOrchestrator tests
 ```
 
 ## Implementation Status
@@ -106,9 +123,21 @@ tests/
 - Export/import functionality (JSON, Markdown)
 - Database migration for summaries table
 
+**Phase 5: Tool System Implementation** ✅
+- ToolRegistry for tool discovery and management
+- ToolExecutor with timeout protection and safety guards
+- Permission system (SAFE, CAUTIOUS, DANGEROUS, BLOCKED levels)
+- PermissionManager with session grants and tool overrides
+- Built-in file tools (read, write, edit, list_directory, search_files)
+- Shell command execution with command safety classification
+- Path access restrictions for file operations
+- ToolEnabledOrchestrator integrating tools with conversation flow
+- Multi-turn tool execution loop with max iteration limits
+- Tool argument validation against JSON Schema
+- Tool result injection into conversation
+
 ### Remaining Phases
 
-- Phase 5: Tool System Implementation
 - Phase 6: Rich TUI Development
 - Phase 7: Commands and User Interaction
 - Phase 8: Git Integration
@@ -146,7 +175,7 @@ pytest tests/test_orchestrator/test_engine.py -v
 pytest tests/ --cov=codecrew
 ```
 
-Current: **267 tests passing**
+Current: **371 tests passing**
 
 ## Dependencies
 
@@ -241,3 +270,69 @@ summary = await summary_manager.summarize_full_conversation(
     messages=conversation,
 )
 ```
+
+### Using the Tool System
+The tool system enables AI models to perform actions like reading files and executing commands:
+
+```python
+from codecrew.tools import (
+    ToolRegistry,
+    ToolExecutor,
+    PermissionManager,
+    register_builtin_tools,
+)
+from codecrew.orchestrator import ToolEnabledOrchestrator
+
+# Create tool registry and register built-in tools
+registry = ToolRegistry()
+register_builtin_tools(registry)
+
+# Create permission manager (auto_approve for development)
+permissions = PermissionManager(auto_approve=True)
+
+# Create executor
+executor = ToolExecutor(registry=registry, permissions=permissions)
+
+# Create tool-enabled orchestrator
+orchestrator = ToolEnabledOrchestrator(
+    clients=model_clients,
+    settings=settings,
+    tool_executor=executor,
+    tool_registry=registry,
+    max_tool_iterations=10,
+)
+
+# Process messages - tools execute automatically
+async for event in orchestrator.process_message("Read the README.md file"):
+    if event.type == EventType.TOOL_CALL:
+        print(f"Tool called: {event.tool_call.name}")
+    elif event.type == EventType.TOOL_RESULT:
+        print(f"Tool result: {event.tool_result.content[:100]}...")
+```
+
+### Adding Custom Tools
+```python
+from codecrew.tools import create_tool, ToolRegistry
+from codecrew.tools.permissions import PermissionLevel
+from codecrew.models.tools import ToolDefinition, ToolParameter
+
+# Using the factory function
+tool = create_tool(
+    name="my_tool",
+    description="Does something useful",
+    parameters=[
+        ToolParameter(name="input", type="string", description="Input value"),
+    ],
+    handler=lambda args: f"Processed: {args['input']}",
+    permission_level=PermissionLevel.SAFE,
+)
+
+registry = ToolRegistry()
+registry.register(tool)
+```
+
+### Permission Levels
+- **SAFE**: Auto-approved, no confirmation needed (e.g., read_file)
+- **CAUTIOUS**: Requires confirmation by default (e.g., write_file)
+- **DANGEROUS**: Always requires explicit approval (e.g., execute_command)
+- **BLOCKED**: Completely blocked, cannot be executed (e.g., `rm -rf /`)

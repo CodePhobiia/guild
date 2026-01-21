@@ -6,6 +6,7 @@ multiple AI models in a group chat setting.
 Main components:
 - Orchestrator: Main engine that coordinates the conversation flow
 - PersistentOrchestrator: Orchestrator with automatic persistence
+- ToolEnabledOrchestrator: Orchestrator with tool execution support
 - SpeakingEvaluator: Determines which models should speak
 - TurnManager: Manages speaking order
 - ContextAssembler: Builds context windows for each model
@@ -35,6 +36,10 @@ from .speaking import (
     SpeakingEvaluator,
     evaluate_speakers,
 )
+from .tool_orchestrator import (
+    ToolEnabledOrchestrator,
+    create_tool_enabled_orchestrator,
+)
 from .turns import TurnManager, TurnStrategy, create_turn_manager
 
 __all__ = [
@@ -44,6 +49,9 @@ __all__ = [
     # Persistent orchestrator
     "PersistentOrchestrator",
     "create_persistent_orchestrator",
+    # Tool-enabled orchestrator
+    "ToolEnabledOrchestrator",
+    "create_tool_enabled_orchestrator",
     # Events
     "EventType",
     "OrchestratorEvent",

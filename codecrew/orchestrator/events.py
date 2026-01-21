@@ -29,7 +29,9 @@ class EventType(Enum):
 
     # Tool use phase
     TOOL_CALL = auto()  # Model wants to call a tool
+    TOOL_EXECUTING = auto()  # Tool is being executed
     TOOL_RESULT = auto()  # Tool execution completed
+    TOOL_PERMISSION_REQUEST = auto()  # Tool requires permission
 
     # Completion/error phase
     ERROR = auto()  # Error occurred
@@ -94,7 +96,9 @@ class OrchestratorEvent:
     - RESPONSE_CHUNK: model, content
     - RESPONSE_COMPLETE: model, response
     - TOOL_CALL: model, tool_call
+    - TOOL_EXECUTING: model, tool_call
     - TOOL_RESULT: model, tool_result
+    - TOOL_PERMISSION_REQUEST: model, tool_call, permission_request
     - ERROR: model (optional), error
     - TURN_COMPLETE: usage (aggregated), responses
     """
@@ -109,6 +113,8 @@ class OrchestratorEvent:
     error: Optional[str] = None
     usage: Optional[Usage] = None
     responses: list[ModelResponse] = field(default_factory=list)
+    # Tool permission request (for TOOL_PERMISSION_REQUEST events)
+    permission_request: Optional[Any] = None  # PermissionRequest from tools module
 
     @classmethod
     def thinking(cls) -> "OrchestratorEvent":
@@ -161,11 +167,33 @@ class OrchestratorEvent:
         return cls(type=EventType.TOOL_CALL, model=model, tool_call=tool_call)
 
     @classmethod
+    def tool_executing_event(
+        cls, model: str, tool_call: ToolCall
+    ) -> "OrchestratorEvent":
+        """Create a TOOL_EXECUTING event."""
+        return cls(type=EventType.TOOL_EXECUTING, model=model, tool_call=tool_call)
+
+    @classmethod
     def tool_result_event(
         cls, model: str, tool_result: ToolResult
     ) -> "OrchestratorEvent":
         """Create a TOOL_RESULT event."""
         return cls(type=EventType.TOOL_RESULT, model=model, tool_result=tool_result)
+
+    @classmethod
+    def tool_permission_request_event(
+        cls,
+        model: str,
+        tool_call: ToolCall,
+        permission_request: Any,
+    ) -> "OrchestratorEvent":
+        """Create a TOOL_PERMISSION_REQUEST event."""
+        return cls(
+            type=EventType.TOOL_PERMISSION_REQUEST,
+            model=model,
+            tool_call=tool_call,
+            permission_request=permission_request,
+        )
 
     @classmethod
     def error_event(
