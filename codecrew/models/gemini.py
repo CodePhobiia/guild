@@ -378,19 +378,23 @@ class GeminiClient(ModelClient):
             )
             async for chunk in stream:
                 try:
-                    # Try to get text from chunk
+                    # Try to get text from chunk directly
                     if hasattr(chunk, "text") and chunk.text:
                         yield StreamChunk(content=chunk.text)
 
-                    # Check for function calls in candidates
-                    if hasattr(chunk, "candidates") and chunk.candidates:
+                    # Check candidates for content parts and function calls
+                    elif hasattr(chunk, "candidates") and chunk.candidates:
                         candidate = chunk.candidates[0]
                         if hasattr(candidate, "content") and candidate.content:
                             parts = getattr(candidate.content, "parts", None)
                             if parts:
                                 for part in parts:
                                     try:
-                                        if hasattr(part, "function_call") and part.function_call:
+                                        # Check for text in parts
+                                        if hasattr(part, "text") and part.text:
+                                            yield StreamChunk(content=part.text)
+                                        # Check for function call
+                                        elif hasattr(part, "function_call") and part.function_call:
                                             fc = part.function_call
                                             fc_name = getattr(fc, "name", None)
                                             fc_args = getattr(fc, "args", None)
