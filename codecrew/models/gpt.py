@@ -118,19 +118,34 @@ class GPTClient(ModelClient):
                         "content": msg.content or None,
                     }
 
-                    # Add tool calls if present
+                    # Add tool calls if present, but only if we can find responses for them
+                    # OpenAI API requires every tool_call to have a corresponding tool response
                     if msg.tool_calls:
-                        message["tool_calls"] = [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments),
-                                },
-                            }
-                            for tc in msg.tool_calls
+                        # Find which tool_call_ids have responses in subsequent messages
+                        msg_index = messages.index(msg)
+                        responded_ids: set[str] = set()
+                        for future_msg in messages[msg_index + 1:]:
+                            if future_msg.role == MessageRole.TOOL:
+                                for result in future_msg.tool_results:
+                                    responded_ids.add(result.tool_call_id)
+
+                        # Only include tool calls that have responses
+                        tool_calls_with_responses = [
+                            tc for tc in msg.tool_calls if tc.id in responded_ids
                         ]
+
+                        if tool_calls_with_responses:
+                            message["tool_calls"] = [
+                                {
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.name,
+                                        "arguments": json.dumps(tc.arguments),
+                                    },
+                                }
+                                for tc in tool_calls_with_responses
+                            ]
 
                     openai_messages.append(message)
 
