@@ -188,6 +188,7 @@ def create_read_file_tool(
         category="file",
         description="Read the contents of a file",
         timeout=10.0,
+        parallel_safe=True,  # Read-only operation, safe to run concurrently
     )
 
 
@@ -372,6 +373,7 @@ def create_list_directory_tool(
         category="file",
         description="List files and directories",
         timeout=30.0,
+        parallel_safe=True,  # Read-only operation, safe to run concurrently
     )
 
 
@@ -479,4 +481,5 @@ def create_search_files_tool(
         category="file",
         description="Search for patterns in file contents",
         timeout=60.0,
+        parallel_safe=True,  # Read-only operation, safe to run concurrently
     )

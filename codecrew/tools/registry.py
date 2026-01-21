@@ -37,6 +37,8 @@ class Tool:
         category: Tool category for organization (e.g., "file", "shell").
         timeout: Maximum execution time in seconds (None = no timeout).
         enabled: Whether the tool is currently available.
+        parallel_safe: If True, this tool can run concurrently with other
+            parallel-safe tools (e.g., read-only operations).
     """
 
     definition: ToolDefinition
@@ -46,6 +48,7 @@ class Tool:
     category: str = "general"
     timeout: Optional[float] = 30.0
     enabled: bool = True
+    parallel_safe: bool = False
 
     @property
     def name(self) -> str:
@@ -288,6 +291,7 @@ def create_tool(
     permission_level: PermissionLevel = PermissionLevel.SAFE,
     category: str = "general",
     timeout: Optional[float] = 30.0,
+    parallel_safe: bool = False,
 ) -> Tool:
     """Factory function to create a Tool with a ToolDefinition.
 
@@ -299,6 +303,8 @@ def create_tool(
         permission_level: Required permission level.
         category: Tool category.
         timeout: Execution timeout in seconds.
+        parallel_safe: If True, this tool can run concurrently with other
+            parallel-safe tools (e.g., read-only operations).
 
     Returns:
         A configured Tool instance.
@@ -314,4 +320,5 @@ def create_tool(
         permission_level=permission_level,
         category=category,
         timeout=timeout,
+        parallel_safe=parallel_safe,
     )

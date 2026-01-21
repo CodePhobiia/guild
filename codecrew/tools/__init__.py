@@ -20,6 +20,12 @@ from codecrew.tools.permissions import (
     PermissionDeniedError,
 )
 from codecrew.tools.builtin import register_builtin_tools, get_builtin_tools
+from codecrew.tools.context import (
+    ToolContext,
+    FileModification,
+    FileReadRecord,
+    compute_content_hash,
+)
 
 __all__ = [
     # Registry
@@ -39,6 +45,11 @@ __all__ = [
     "PermissionLevel",
     "PermissionRequest",
     "PermissionDeniedError",
+    # Context tracking
+    "ToolContext",
+    "FileModification",
+    "FileReadRecord",
+    "compute_content_hash",
     # Builtin tools
     "register_builtin_tools",
     "get_builtin_tools",

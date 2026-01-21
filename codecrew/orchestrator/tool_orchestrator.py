@@ -20,6 +20,7 @@ from codecrew.models.types import (
     ToolResult,
     Usage,
 )
+from codecrew.tools.context import ToolContext
 
 from .engine import Orchestrator
 from .events import EventType, OrchestratorEvent
@@ -31,6 +32,13 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# Tools that are known to be safe for parallel execution (read-only)
+PARALLEL_SAFE_TOOLS: frozenset[str] = frozenset({
+    "read_file",
+    "list_directory",
+    "search_files",
+})
 
 
 class ToolEnabledOrchestrator(Orchestrator):
@@ -61,6 +69,7 @@ class ToolEnabledOrchestrator(Orchestrator):
         tool_executor: "ToolExecutor",
         tool_registry: "ToolRegistry",
         max_tool_iterations: int = 10,
+        enable_parallel_tools: bool = True,
         **kwargs,
     ):
         """Initialize the tool-enabled orchestrator.
@@ -71,12 +80,15 @@ class ToolEnabledOrchestrator(Orchestrator):
             tool_executor: Executor for running tools.
             tool_registry: Registry of available tools.
             max_tool_iterations: Max tool execution loops per turn.
+            enable_parallel_tools: If True, execute parallel-safe tools concurrently.
             **kwargs: Additional args passed to base Orchestrator.
         """
         super().__init__(clients=clients, settings=settings, **kwargs)
         self.tool_executor = tool_executor
         self.tool_registry = tool_registry
         self.max_tool_iterations = max_tool_iterations
+        self.enable_parallel_tools = enable_parallel_tools
+        self.tool_context = ToolContext()
 
     def get_tool_definitions(self):
         """Get tool definitions for passing to model clients.
@@ -240,46 +252,161 @@ class ToolEnabledOrchestrator(Orchestrator):
             model=model_name,
         )
 
+    def _classify_tool_calls(
+        self, tool_calls: list[ToolCall]
+    ) -> tuple[list[ToolCall], list[ToolCall]]:
+        """Classify tool calls into parallel-safe and sequential groups.
+
+        Args:
+            tool_calls: List of tool calls to classify.
+
+        Returns:
+            Tuple of (parallel_safe_calls, sequential_calls).
+        """
+        parallel_calls: list[ToolCall] = []
+        sequential_calls: list[ToolCall] = []
+
+        for call in tool_calls:
+            tool = self.tool_registry.get(call.name)
+
+            # Check if tool is parallel-safe (either by name or by flag)
+            is_parallel_safe = (
+                call.name in PARALLEL_SAFE_TOOLS
+                or (tool is not None and tool.parallel_safe)
+            )
+
+            if is_parallel_safe:
+                parallel_calls.append(call)
+            else:
+                sequential_calls.append(call)
+
+        return parallel_calls, sequential_calls
+
+    def _reorder_results(
+        self,
+        original_calls: list[ToolCall],
+        results: list[ToolResult],
+    ) -> list[ToolResult]:
+        """Reorder results to match the original call order.
+
+        Args:
+            original_calls: Original tool calls in order.
+            results: Results that may be in different order.
+
+        Returns:
+            Results in same order as original calls.
+        """
+        # Create mapping from tool_call_id to result
+        result_map = {r.tool_call_id: r for r in results}
+
+        # Return results in original order
+        return [result_map[call.id] for call in original_calls if call.id in result_map]
+
     async def _execute_tools(
         self,
         model_name: str,
         tool_calls: list[ToolCall],
     ) -> list[ToolResult]:
-        """Execute a list of tool calls.
+        """Execute a list of tool calls with parallel optimization.
+
+        Parallel-safe tools (read-only operations) are executed concurrently,
+        while sequential tools (writes, edits) are executed in order.
 
         Args:
             model_name: Model that requested the tools.
             tool_calls: Tool calls to execute.
 
         Returns:
-            List of tool results.
+            List of tool results in the same order as input calls.
         """
-        results = []
+        if not tool_calls:
+            return []
 
-        for tool_call in tool_calls:
-            logger.info(f"Executing tool: {tool_call.name} for {model_name}")
+        results: list[ToolResult] = []
 
-            # Execute the tool
-            execution_result = await self.tool_executor.execute(
-                tool_call=tool_call,
-                require_confirmation=True,
-            )
+        if self.enable_parallel_tools:
+            # Classify tools into parallel-safe and sequential
+            parallel_calls, sequential_calls = self._classify_tool_calls(tool_calls)
 
-            # Convert to ToolResult
-            tool_result = execution_result.to_tool_result()
-            results.append(tool_result)
-
-            if execution_result.success:
-                logger.debug(
-                    f"Tool {tool_call.name} completed successfully "
-                    f"({execution_result.execution_time:.2f}s)"
+            # Execute parallel-safe tools concurrently
+            if parallel_calls:
+                logger.info(
+                    f"Executing {len(parallel_calls)} parallel-safe tools for {model_name}"
                 )
-            else:
-                logger.warning(
-                    f"Tool {tool_call.name} failed: {execution_result.error}"
+                parallel_results = await self.tool_executor.execute_batch(
+                    tool_calls=parallel_calls,
+                    parallel=True,
+                    require_confirmation=True,
                 )
+                for exec_result in parallel_results:
+                    results.append(exec_result.to_tool_result())
+                    self._log_tool_result(exec_result)
+
+            # Execute sequential tools in order
+            for tool_call in sequential_calls:
+                logger.info(f"Executing tool: {tool_call.name} for {model_name}")
+                exec_result = await self.tool_executor.execute(
+                    tool_call=tool_call,
+                    require_confirmation=True,
+                )
+                results.append(exec_result.to_tool_result())
+                self._log_tool_result(exec_result)
+
+                # Track modifications in context
+                if exec_result.success and tool_call.name in ("write_file", "edit_file"):
+                    path = tool_call.arguments.get("path", "unknown")
+                    operation = "write" if tool_call.name == "write_file" else "edit"
+                    self.tool_context.record_modification(path, operation)
+
+            # Reorder results to match original call order
+            results = self._reorder_results(tool_calls, results)
+
+        else:
+            # Sequential execution for all tools (original behavior)
+            for tool_call in tool_calls:
+                logger.info(f"Executing tool: {tool_call.name} for {model_name}")
+                exec_result = await self.tool_executor.execute(
+                    tool_call=tool_call,
+                    require_confirmation=True,
+                )
+                results.append(exec_result.to_tool_result())
+                self._log_tool_result(exec_result)
+
+                # Track modifications in context
+                if exec_result.success and tool_call.name in ("write_file", "edit_file"):
+                    path = tool_call.arguments.get("path", "unknown")
+                    operation = "write" if tool_call.name == "write_file" else "edit"
+                    self.tool_context.record_modification(path, operation)
 
         return results
+
+    def _log_tool_result(self, exec_result) -> None:
+        """Log the result of a tool execution.
+
+        Args:
+            exec_result: The ToolExecutionResult from execution.
+        """
+        if exec_result.success:
+            logger.debug(
+                f"Tool {exec_result.tool_name} completed successfully "
+                f"({exec_result.execution_time:.2f}s)"
+            )
+        else:
+            logger.warning(
+                f"Tool {exec_result.tool_name} failed: {exec_result.error}"
+            )
+
+    def get_tool_context_summary(self) -> str:
+        """Get a summary of tool activity in this session.
+
+        Returns:
+            Human-readable summary of file modifications.
+        """
+        return self.tool_context.get_modification_summary()
+
+    def clear_tool_context(self) -> None:
+        """Clear the tool context tracking data."""
+        self.tool_context.clear()
 
 
 def create_tool_enabled_orchestrator(
@@ -288,6 +415,7 @@ def create_tool_enabled_orchestrator(
     tool_executor: "ToolExecutor",
     tool_registry: "ToolRegistry",
     max_tool_iterations: int = 10,
+    enable_parallel_tools: bool = True,
 ) -> ToolEnabledOrchestrator:
     """Factory function to create a tool-enabled orchestrator.
 
@@ -297,6 +425,7 @@ def create_tool_enabled_orchestrator(
         tool_executor: Tool executor instance.
         tool_registry: Tool registry instance.
         max_tool_iterations: Maximum tool execution loops.
+        enable_parallel_tools: If True, execute parallel-safe tools concurrently.
 
     Returns:
         Configured ToolEnabledOrchestrator.
@@ -312,5 +441,6 @@ def create_tool_enabled_orchestrator(
         tool_executor=tool_executor,
         tool_registry=tool_registry,
         max_tool_iterations=max_tool_iterations,
+        enable_parallel_tools=enable_parallel_tools,
         turn_strategy=strategy,  # type: ignore
     )

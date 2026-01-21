@@ -26,10 +26,15 @@ from .mentions import (
 )
 from .persistent import PersistentOrchestrator, create_persistent_orchestrator
 from .prompts import (
+    MODEL_PROFILES,
+    ModelProfile,
     SHOULD_SPEAK_PROMPT,
+    SHOULD_SPEAK_PROMPT_V2,
     SYSTEM_PROMPT_TEMPLATE,
+    SYSTEM_PROMPT_TEMPLATE_V2,
     format_should_speak_prompt,
     format_system_prompt,
+    get_model_profile,
 )
 from .speaking import (
     DEFAULT_SILENCE_THRESHOLD,
@@ -77,7 +82,13 @@ __all__ = [
     "KNOWN_MODELS",
     # Prompts
     "SHOULD_SPEAK_PROMPT",
+    "SHOULD_SPEAK_PROMPT_V2",
     "SYSTEM_PROMPT_TEMPLATE",
+    "SYSTEM_PROMPT_TEMPLATE_V2",
     "format_should_speak_prompt",
     "format_system_prompt",
+    # Model profiles
+    "ModelProfile",
+    "MODEL_PROFILES",
+    "get_model_profile",
 ]

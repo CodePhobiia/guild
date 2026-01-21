@@ -24,6 +24,14 @@ from codecrew.tools.registry import Tool, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
+# Errors that are transient and worth retrying
+RETRYABLE_ERRORS: tuple[type[Exception], ...] = (
+    TimeoutError,
+    ConnectionError,
+    OSError,
+    asyncio.TimeoutError,
+)
+
 
 class ToolExecutionError(Exception):
     """Raised when tool execution fails."""
@@ -98,13 +106,57 @@ class ToolExecutionResult:
             # Convert result to string for model consumption
             content = self._format_result(self.result)
         else:
-            content = f"Error: {self.error}"
+            content = self._format_error()
 
         return ToolResult(
             tool_call_id=self.tool_call_id,
             content=content,
             is_error=not self.success,
         )
+
+    def _format_error(self) -> str:
+        """Format error with actionable guidance.
+
+        Provides helpful suggestions based on common error patterns
+        to help the model recover from failures.
+
+        Returns:
+            Formatted error string with suggestions.
+        """
+        error_lines = [f"Error: {self.error}", f"Tool: {self.tool_name}"]
+        error_lower = (self.error or "").lower()
+
+        # Add actionable suggestions based on error type
+        if "not found" in error_lower or "no such file" in error_lower:
+            error_lines.append(
+                "Suggestion: Use list_directory or search_files to find the correct path."
+            )
+        elif "permission" in error_lower or "denied" in error_lower:
+            error_lines.append(
+                "Suggestion: Check if the path is within allowed directories, "
+                "or if the operation requires elevated permissions."
+            )
+        elif "timeout" in error_lower:
+            error_lines.append(
+                "Suggestion: The operation took too long. Try with a smaller "
+                "scope or break it into multiple smaller operations."
+            )
+        elif "validation" in error_lower or "invalid" in error_lower:
+            error_lines.append(
+                "Suggestion: Check the argument types and values. "
+                "Use the correct format as specified in the tool definition."
+            )
+        elif "encoding" in error_lower or "decode" in error_lower:
+            error_lines.append(
+                "Suggestion: The file may be binary or use a non-UTF8 encoding. "
+                "Try specifying the encoding or check if it's a binary file."
+            )
+        elif "connection" in error_lower or "network" in error_lower:
+            error_lines.append(
+                "Suggestion: Network connectivity issue. The operation may succeed if retried."
+            )
+
+        return "\n".join(error_lines)
 
     def _format_result(self, result: Any) -> str:
         """Format the result for model consumption.
@@ -228,6 +280,17 @@ class ToolExecutor:
                 execution_time=execution_time,
             )
 
+        except RETRYABLE_ERRORS as e:
+            # Mark retryable errors distinctly
+            logger.warning(f"Retryable error for tool {tool_name}: {e}")
+            return ToolExecutionResult(
+                tool_call_id=tool_call.id,
+                tool_name=tool_name,
+                success=False,
+                error=f"Transient error (retryable): {type(e).__name__}: {e}",
+                execution_time=asyncio.get_event_loop().time() - start_time,
+            )
+
         except ToolNotFoundError as e:
             logger.warning(f"Tool not found: {tool_name}")
             return ToolExecutionResult(
@@ -280,6 +343,74 @@ class ToolExecutor:
                 error=f"Execution error: {type(e).__name__}: {e}",
                 execution_time=asyncio.get_event_loop().time() - start_time,
             )
+
+    async def execute_with_retry(
+        self,
+        tool_call: ToolCall,
+        require_confirmation: bool = True,
+        max_retries: int = 2,
+        base_delay: float = 0.5,
+    ) -> ToolExecutionResult:
+        """Execute a tool call with automatic retry for transient failures.
+
+        Implements exponential backoff for retryable errors like timeouts,
+        connection errors, and OS errors.
+
+        Args:
+            tool_call: The tool call to execute.
+            require_confirmation: Whether to require user confirmation
+                                 for sensitive operations.
+            max_retries: Maximum number of retry attempts (default: 2).
+            base_delay: Base delay in seconds between retries (default: 0.5).
+                       Actual delay is base_delay * (attempt + 1) for backoff.
+
+        Returns:
+            ToolExecutionResult with success/failure status and result.
+        """
+        last_result: Optional[ToolExecutionResult] = None
+
+        for attempt in range(max_retries + 1):
+            result = await self.execute(tool_call, require_confirmation)
+
+            # Success - return immediately
+            if result.success:
+                if attempt > 0:
+                    logger.info(
+                        f"Tool {tool_call.name} succeeded after {attempt} retries"
+                    )
+                return result
+
+            last_result = result
+
+            # Check if error is retryable
+            is_retryable = (
+                result.error is not None
+                and "transient error" in result.error.lower()
+            )
+
+            # If not retryable or out of retries, return the result
+            if not is_retryable or attempt == max_retries:
+                if attempt > 0:
+                    logger.warning(
+                        f"Tool {tool_call.name} failed after {attempt + 1} attempts"
+                    )
+                return result
+
+            # Calculate delay with exponential backoff
+            delay = base_delay * (attempt + 1)
+            logger.info(
+                f"Retrying tool {tool_call.name} in {delay}s "
+                f"(attempt {attempt + 1}/{max_retries})"
+            )
+            await asyncio.sleep(delay)
+
+        # Should not reach here, but return last result just in case
+        return last_result or ToolExecutionResult(
+            tool_call_id=tool_call.id,
+            tool_name=tool_call.name,
+            success=False,
+            error="Unexpected retry loop exit",
+        )
 
     async def execute_batch(
         self,
