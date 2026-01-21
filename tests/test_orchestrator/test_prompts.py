@@ -86,8 +86,8 @@ class TestFormatShouldSpeakPrompt:
             use_enhanced=True,
         )
 
-        # Should include Claude's strength areas
-        assert "Complex reasoning" in prompt or "Code architecture" in prompt
+        # Should include Claude's strength areas (optimized format)
+        assert "Architecture" in prompt or "design patterns" in prompt or "Security" in prompt
 
     def test_enhanced_format_includes_silence_conditions(self):
         """Enhanced format should include silence conditions."""
@@ -99,8 +99,8 @@ class TestFormatShouldSpeakPrompt:
             use_enhanced=True,
         )
 
-        # Should include GPT's silence conditions
-        assert "STAY SILENT" in prompt
+        # Should include GPT's silence conditions (optimized format uses "SILENT if:")
+        assert "SILENT if:" in prompt
 
     def test_previous_responses_included(self):
         """Previous responses should be included when provided."""
@@ -153,8 +153,8 @@ class TestFormatSystemPrompt:
             use_enhanced=True,
         )
 
-        # Should include Grok's personality
-        assert "YOUR PERSONALITY:" in prompt
+        # Should include Grok's personality (optimized format uses "Personality:" under IDENTITY section)
+        assert "Personality:" in prompt
 
     def test_enhanced_format_includes_response_rules(self):
         """Enhanced format should include response rules."""
@@ -197,7 +197,8 @@ class TestFormatSystemPrompt:
             use_enhanced=True,
         )
 
-        assert "NOT prefix" in prompt or "not prefix" in prompt.lower()
+        # Optimized format mentions "no prefix" in GROUP CHAT section
+        assert "no prefix" in prompt.lower() or "yours: no prefix" in prompt.lower()
 
 
 class TestPromptTemplates:
